@@ -51,6 +51,7 @@ src/docdebt/service/commands.py
 src/docdebt/service/config.py
 src/docdebt/service/github_client.py
 src/docdebt/service/review_flow.py
+src/docdebt/service/runtime_settings.py
 src/docdebt/service/store.py
 src/docdebt/service/webhooks.py
 src/docdebt_guardian.egg-info/PKG-INFO
@@ -65,6 +66,7 @@ tests/test_graph.py
 tests/test_llm.py
 tests/test_repair.py
 tests/test_service_app.py
+tests/test_service_dashboard_pages.py
 tests/test_service_github_client.py
 tests/test_service_review_flow.py
 tests/test_service_store_dashboard.py

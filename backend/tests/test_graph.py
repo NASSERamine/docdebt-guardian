@@ -235,3 +235,18 @@ def test_run_unit_reanalyses_edited_content_under_the_same_thread_id(local_spec)
     app.run_unit(edited, thread_id="edited")
     assert len(calls) > count_after_first
     assert app.pending_interrupt("edited") is not None
+
+
+def test_resume_refuses_a_thread_that_is_not_paused():
+    """Resuming an unknown thread must fail loudly, not run the graph again
+    from an empty state."""
+    import pytest
+    from langgraph.checkpoint.memory import InMemorySaver
+
+    from docdebt.core.auditor import Auditor
+    from docdebt.graph.build import GraphApp
+    from docdebt.graph.nodes import GraphDeps
+
+    app = GraphApp(GraphDeps(auditor=Auditor(), router=None, repairer=None), InMemorySaver())
+    with pytest.raises(ValueError, match="not paused"):
+        app.resume("never-started", "accept")

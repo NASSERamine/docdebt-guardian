@@ -182,7 +182,14 @@ class GraphApp:
         return self.get_state(thread_id)
 
     def resume(self, thread_id: str, decision: str) -> DocDebtState:
-        """Continue a paused thread with a human decision ("accept" or "reject")."""
+        """Continue a paused thread with a human decision ("accept" or "reject").
+
+        Raises ``ValueError`` if the thread is not paused: invoking a resume on
+        an unknown or finished thread would start the graph again from an
+        empty state instead.
+        """
+        if self.pending_interrupt(thread_id) is None:
+            raise ValueError(f"Thread {thread_id!r} is not paused at a review.")
         self.compiled.invoke(Command(resume=decision), self._config(thread_id))
         return self.get_state(thread_id)
 

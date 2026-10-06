@@ -27,7 +27,7 @@ def verify_signature(payload: bytes, signature_header: str | None, secret: str) 
 
 @dataclass(frozen=True)
 class PullRequestEvent:
-    action: str  # "opened", "synchronize", "reopened", ...
+    action: str  # "opened", "synchronize", "reopened", ... or "scan" (dashboard button)
     owner: str
     repo: str
     number: int

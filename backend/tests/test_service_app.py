@@ -292,3 +292,110 @@ def test_missing_dashboard_build_does_not_break_the_api(app_settings, tmp_path, 
     assert client.get("/health").status_code == 200
     assert client.get("/api/summary").status_code == 200
     assert client.get("/dashboard").status_code == 404  # no UI mounted, API still works
+
+
+# -- decisions from the dashboard ----------------------------------------------
+
+DASHBOARD_TOKEN = "dash-token"
+
+
+@pytest.fixture
+def decide_client(app_settings, monkeypatch):
+    """A client whose settings enable dashboard decisions; the actual graph
+    resume and GitHub calls are replaced by a recorder (they are covered in
+    test_service_review_flow.py)."""
+    from dataclasses import replace
+
+    from docdebt.service.review_flow import DecisionOutcome, DecisionStatus
+
+    calls = []
+
+    def fake_decide(settings, store, request, decision, installation_id):
+        calls.append((request.short_id, decision, installation_id))
+        store.mark_resolved(request.short_id, decision)
+        return DecisionOutcome(DecisionStatus.APPLIED, "Applied the fix.", "abcdef1")
+
+    monkeypatch.setattr("docdebt.service.app._decide_from_dashboard", fake_decide)
+    settings = replace(app_settings, dashboard_token=DASHBOARD_TOKEN)
+    client = TestClient(create_app(settings))
+    client.app.state.decide_calls = calls  # type: ignore[attr-defined]
+    return client
+
+
+def _proposal(app_settings, installation_id="555", repo="demo"):
+    from docdebt.service.store import ReviewStore
+
+    return ReviewStore(app_settings.state_db_path).create(
+        thread_id="t1",
+        owner="acme",
+        repo=repo,
+        pr_number=1,
+        file_path="X.java",
+        method_label="X.f",
+        head_sha="sha1",
+        installation_id=installation_id,
+    )
+
+
+def _decide(client, short_id, decision="accept", token=DASHBOARD_TOKEN):
+    headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
+    return client.post(f"/api/proposals/{short_id}/decide", json={"decision": decision}, headers=headers)
+
+
+def test_dashboard_decisions_are_disabled_without_a_configured_token(client, app_settings):
+    short_id = _proposal(app_settings)
+    assert client.get("/api/dashboard-config").json() == {"decisions_enabled": False}
+    assert _decide(client, short_id).status_code == 403
+
+
+def test_dashboard_decision_requires_the_right_token(decide_client, app_settings):
+    short_id = _proposal(app_settings)
+    assert decide_client.get("/api/dashboard-config").json() == {"decisions_enabled": True}
+    assert _decide(decide_client, short_id, token=None).status_code == 401
+    assert _decide(decide_client, short_id, token="wrong").status_code == 401
+    assert decide_client.app.state.decide_calls == []
+
+
+def test_dashboard_accept_runs_the_decision_and_returns_its_outcome(decide_client, app_settings):
+    short_id = _proposal(app_settings)
+    response = _decide(decide_client, short_id)
+    assert response.status_code == 200
+    assert response.json() == {"status": "applied", "message": "Applied the fix.", "commit_sha": "abcdef1"}
+    assert decide_client.app.state.decide_calls == [(short_id, "accept", "555")]
+
+
+def test_dashboard_decision_on_unknown_or_resolved_proposal(decide_client, app_settings):
+    assert _decide(decide_client, "deadbeef").status_code == 404
+    short_id = _proposal(app_settings)
+    assert _decide(decide_client, short_id).status_code == 200
+    assert _decide(decide_client, short_id, "reject").status_code == 409  # already resolved
+    assert len(decide_client.app.state.decide_calls) == 1
+
+
+def test_dashboard_decision_rejects_an_invalid_decision(decide_client, app_settings):
+    short_id = _proposal(app_settings)
+    assert _decide(decide_client, short_id, "merge").status_code == 422
+    assert decide_client.app.state.decide_calls == []
+
+
+def test_dashboard_decision_falls_back_to_the_repository_installation(decide_client, app_settings):
+    from docdebt.service.store import ReviewStore
+
+    short_id = _proposal(app_settings, installation_id=None)  # created before the column existed
+    assert _decide(decide_client, short_id).status_code == 409  # no way to authenticate to GitHub
+
+    ReviewStore(app_settings.state_db_path).connect_repository(owner="acme", repo="demo", installation_id="777")
+    assert _decide(decide_client, short_id).status_code == 200
+    assert decide_client.app.state.decide_calls == [(short_id, "accept", "777")]
+
+
+def test_dashboard_decision_failure_is_reported_not_crashed(app_settings, monkeypatch):
+    from dataclasses import replace
+
+    def boom(*args):
+        raise RuntimeError("GitHub unreachable")
+
+    monkeypatch.setattr("docdebt.service.app._decide_from_dashboard", boom)
+    client = TestClient(create_app(replace(app_settings, dashboard_token=DASHBOARD_TOKEN)))
+    response = _decide(client, _proposal(app_settings))
+    assert response.status_code == 502 and "GitHub unreachable" in response.json()["detail"]

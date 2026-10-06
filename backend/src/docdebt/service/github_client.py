@@ -37,7 +37,6 @@ class GithubApiError(RuntimeError):
 
 
 @dataclass
-@dataclass
 class _CachedToken:
     token: str
     expires_at: float  # unix timestamp
@@ -90,16 +89,71 @@ class GithubClient:
             "X-GitHub-Api-Version": "2022-11-28",
         }
 
+    def _app_get(self, path: str, **kwargs: Any) -> httpx.Response:
+        """A GET authenticated as the App itself (JWT), not as an installation:
+        the only way to ask GitHub which installations exist."""
+        response = self.http.get(
+            f"{API_BASE}{path}",
+            headers={
+                "Authorization": f"Bearer {self._app_jwt()}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            **kwargs,
+        )
+        if response.status_code >= 400:
+            raise GithubApiError("GET", path, response)
+        return response
+
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         response = self.http.request(method, f"{API_BASE}{path}", headers=self._headers(), **kwargs)
         if response.status_code >= 400:
             raise GithubApiError(method, path, response)
         return response
 
+    # -- installations (where the App is installed) -----------------------------
+
+    def list_installations(self, *, max_pages: int = 10) -> list[dict]:
+        """Every installation of this App (needs no installation id)."""
+        found: list[dict] = []
+        for page in range(1, max_pages + 1):
+            batch = self._app_get("/app/installations", params={"per_page": 100, "page": page}).json()
+            found.extend(batch)
+            if len(batch) < 100:
+                break
+        return found
+
+    def list_installation_repositories(self, *, max_pages: int = 10) -> list[dict]:
+        """The repositories this client's installation gives access to."""
+        found: list[dict] = []
+        for page in range(1, max_pages + 1):
+            body = self._request(
+                "GET", "/installation/repositories", params={"per_page": 100, "page": page}
+            ).json()
+            found.extend(body.get("repositories", []))
+            if len(body.get("repositories", [])) < 100:
+                break
+        return found
+
     # -- pull requests --------------------------------------------------------
 
     def get_pull_request(self, owner: str, repo: str, number: int) -> dict:
         return self._request("GET", f"/repos/{owner}/{repo}/pulls/{number}").json()
+
+    def list_open_pull_requests(self, owner: str, repo: str, *, max_pages: int = 5) -> list[dict]:
+        """The repository's open pull requests, oldest first (100 per page, at
+        most ``max_pages`` pages)."""
+        pulls: list[dict] = []
+        for page in range(1, max_pages + 1):
+            batch = self._request(
+                "GET",
+                f"/repos/{owner}/{repo}/pulls",
+                params={"state": "open", "per_page": 100, "page": page, "sort": "created", "direction": "asc"},
+            ).json()
+            pulls.extend(batch)
+            if len(batch) < 100:
+                break
+        return pulls
 
     def get_pull_request_diff(self, owner: str, repo: str, number: int) -> str:
         response = self.http.request(

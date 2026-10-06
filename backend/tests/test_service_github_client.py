@@ -104,3 +104,20 @@ def test_api_error_raised_with_status(monkeypatch):
     with pytest.raises(GithubApiError) as exc:
         gh.get_pull_request("o", "r", 1)
     assert exc.value.status_code == 422
+
+
+def test_list_open_pull_requests_follows_pages(monkeypatch):
+    pages = {1: [{"number": n} for n in range(100)], 2: [{"number": 100}]}
+    seen = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "t", "expires_at": "2099-01-01T00:00:00Z"})
+        seen.append(dict(request.url.params))
+        return httpx.Response(200, json=pages[int(request.url.params["page"])])
+
+    monkeypatch.setattr("jwt.encode", lambda payload, key, algorithm: "fake.jwt")
+    client = GithubClient("1", "k", "2", http=httpx.Client(transport=httpx.MockTransport(handler)))
+    pulls = client.list_open_pull_requests("acme", "demo")
+    assert len(pulls) == 101
+    assert [p["page"] for p in seen] == ["1", "2"] and seen[0]["state"] == "open"

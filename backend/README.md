@@ -218,6 +218,57 @@ step — no token to create, no config file to edit on the user's side. What
 happens after (App created, keys, webhook secret) is developer-side, one-time
 setup, covered in "GitHub App service" below.
 
+**Pages.** The dashboard is a small single-page app (React Router), every
+page addressable by URL:
+
+| URL | Page |
+|---|---|
+| `/dashboard/` | Overview: totals, repositories, the 10 latest proposals, 14-day LLM usage |
+| `/dashboard/proposals` | History: every proposal, searchable (method, file, id) and filterable by repository, status and date range, 25 per page. Filters live in the URL (`?repo=&status=&q=&since=&until=&page=`), so a filtered view can be bookmarked |
+| `/dashboard/repos/<owner>/<repo>` | One repository: connection state, counts, LLM calls, tokens, cost, 30-day usage, and its own filtered history |
+| `/dashboard/proposals/<id>` | One proposal before deciding: the debt found (each rule and message, or the quoted claim and code for semantic debt), the proposed fix as a diff and field by field, the method as it is today, then Accept / Reject |
+| `/dashboard/settings` | Model, repair prompt, semantic detection on/off, confidence threshold, cost cap; connected and disconnected repositories |
+
+**Settings are applied without a restart.** `.env` gives the defaults; values
+saved on the Settings page are stored in the state database and override
+them, read again for every webhook, so the next pull request uses them.
+*Reset to defaults* forgets every saved value. Saving needs the dashboard
+token (below). The cost cap counts the LLM cost recorded across all
+repositories; once reached, a new push is not reviewed and the PR gets a
+comment saying why (local Ollama models record no cost). Connecting and
+removing repositories still happens on GitHub, in the App's installation
+settings; the list follows the installation webhooks.
+
+**Scan now.** A connected repository's page has a *Scan now* button: it
+reviews every open pull request of the repository right away, exactly as if
+GitHub had sent a webhook for each one (same graph, same PR comments, same
+Accept/Reject), so a demo does not have to wait for a real push. It runs in
+the background; the page follows it and shows the totals (PRs scanned, new
+proposals, proposals already waiting, clean methods). One scan at a time per
+repository; it needs the dashboard token and respects the cost cap. A
+proposal still waiting for a decision is never posted twice, whether the PR
+is scanned again or receives a push that does not touch that method.
+
+API behind the pages: `GET /api/proposals/search`, `GET /api/proposals/<id>`, `GET /api/repos/<owner>/<repo>`,
+`GET|PUT|DELETE /api/settings`, `POST /api/repos/<owner>/<repo>/scan`,
+`GET /api/scans/<id>` and `POST /api/installations/sync` (writes need the token).
+
+**Accept or reject from the dashboard.** Each pending proposal in *Recent
+activity* has **Accept** / **Reject** buttons. They call
+`POST /api/proposals/<id>/decide` (`{"decision": "accept" | "reject"}`), which
+runs exactly the same code as a `/docdebt accept|reject <id>` PR comment
+(`ReviewFlow.decide`): the paused graph is resumed, an accepted fix is
+committed to the PR branch, and the outcome is still posted on the PR, marked
+"decided from the dashboard", so the PR keeps the full history. Decisions
+from PR comments and from the dashboard are serialized, so the same fix is
+never committed twice.
+
+The buttons only appear when `DOCDEBT_DASHBOARD_TOKEN` is set; without it the
+dashboard stays read-only and shows the slash command instead. The dashboard
+asks for the token on the first click and keeps it in the browser. The token
+matters because the cloudflared tunnel exposes the whole port 8000, not only
+the webhook: without it, anyone who finds the URL could commit to your PRs.
+
 **Active development on the UI**: run the API and the dashboard as two
 processes instead, so UI edits show up without rebuilding:
 

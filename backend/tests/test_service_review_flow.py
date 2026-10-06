@@ -57,7 +57,16 @@ class FakeGithub:
     for. Without it, every fetch returns ``file_content``.
     """
 
-    def __init__(self, file_content: str = SOURCE, put_status: int = 200, content_at_accept: str | None = None):
+    def __init__(
+        self,
+        file_content: str = SOURCE,
+        put_status: int = 200,
+        content_at_accept: str | None = None,
+        open_prs: tuple[int, ...] = (1,),
+        failing_prs: tuple[int, ...] = (),
+    ):
+        self.open_prs = open_prs
+        self.failing_prs = failing_prs
         self.comments: list[str] = []
         self.commits: list[dict] = []
         self.file_content = file_content
@@ -70,7 +79,13 @@ class FakeGithub:
         path, method = request.url.path, request.method
         if path.endswith("/access_tokens"):
             return httpx.Response(201, json={"token": "t", "expires_at": "2099-01-01T00:00:00Z"})
+        if path.endswith("/pulls") and method == "GET":
+            return httpx.Response(
+                200, json=[{"number": n, "head": {"ref": f"branch-{n}", "sha": f"sha-{n}"}} for n in self.open_prs]
+            )
         if "/pulls/" in path and request.headers.get("accept", "").endswith("v3.diff"):
+            if int(path.rsplit("/", 1)[1]) in self.failing_prs:
+                return httpx.Response(404, json={"message": "Not Found"})
             return httpx.Response(200, text=DIFF)
         if "/pulls/" in path and method == "GET":
             return httpx.Response(200, json={"number": 1, "head": {"ref": "feature", "sha": "sha1"}})
@@ -331,6 +346,7 @@ def test_repo_breakdown_and_recent_proposals(monkeypatch, tmp_path):
             "pending": 1,
             "accepted": 0,
             "rejected": 0,
+            "expired": 0,
             "unknown": 0,
             "cost_usd": 0.0,
         }
@@ -347,3 +363,229 @@ def test_repo_breakdown_and_recent_proposals(monkeypatch, tmp_path):
     )
     breakdown = flow.store.repo_breakdown()
     assert breakdown[0]["accepted"] == 1 and breakdown[0]["pending"] == 0
+
+
+# -- decisions from the dashboard ---------------------------------------------
+
+
+def _short_id(fake):
+    import re
+
+    return re.search(r"/docdebt accept ([0-9a-f]+)", fake.comments[0]).group(1)
+
+
+def test_review_stores_the_installation_id_for_dashboard_decisions(monkeypatch, tmp_path):
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event(installation_id="install-9"))
+    assert flow.store.get(_short_id(fake)).installation_id == "install-9"
+
+
+def test_dashboard_accept_commits_like_a_comment_and_leaves_a_trace_on_the_pr(monkeypatch, tmp_path):
+    from docdebt.service.review_flow import DecisionStatus
+
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event())
+
+    outcome = flow.decide(_short_id(fake), "accept", owner="acme", repo="demo", pr_number=1, via="the dashboard")
+
+    assert outcome.status == DecisionStatus.APPLIED and outcome.commit_sha == "abcdef1"
+    assert len(fake.commits) == 1
+    assert "@param tempInKelvin" in base64.b64decode(fake.commits[0]["content"]).decode()
+    assert "✅" in fake.comments[-1] and "decided from the dashboard" in fake.comments[-1]
+    assert flow.store.get(_short_id(fake)).decision == "accept"
+
+
+def test_dashboard_reject_makes_no_commit(monkeypatch, tmp_path):
+    from docdebt.service.review_flow import DecisionStatus
+
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event())
+
+    outcome = flow.decide(_short_id(fake), "reject", owner="acme", repo="demo", pr_number=1, via="the dashboard")
+    assert outcome.status == DecisionStatus.REJECTED
+    assert not fake.commits
+    assert "rejected (decided from the dashboard)" in fake.comments[-1]
+
+
+def test_dashboard_then_comment_on_the_same_proposal_commits_once(monkeypatch, tmp_path):
+    from docdebt.service.review_flow import DecisionStatus
+
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event())
+    short_id = _short_id(fake)
+
+    flow.decide(short_id, "accept", owner="acme", repo="demo", pr_number=1, via="the dashboard")
+    cmd = parse_slash_command(f"/docdebt accept {short_id}")
+    outcome = flow.handle_command(comment_event(f"/docdebt accept {short_id}"), cmd)
+    assert outcome.status == DecisionStatus.NOT_FOUND
+    assert len(fake.commits) == 1
+
+
+def test_dashboard_accept_when_github_rejects_the_commit_reports_not_applied(monkeypatch, tmp_path):
+    from docdebt.service.review_flow import DecisionStatus
+
+    fake = FakeGithub(put_status=422)
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event())
+
+    outcome = flow.decide(_short_id(fake), "accept", owner="acme", repo="demo", pr_number=1, via="the dashboard")
+    assert outcome.status == DecisionStatus.NOT_APPLIED and "422" in outcome.message
+    assert not fake.commits
+
+
+def test_decision_on_a_proposal_whose_graph_run_is_gone_expires_it_cleanly(monkeypatch, tmp_path):
+    """A proposal row whose paused graph thread no longer exists (graph database
+    reset or moved, or a row inserted by hand) must not restart the graph from
+    an empty state -- that crashed with KeyError: 'unit' -- but expire cleanly."""
+    from docdebt.service.review_flow import DecisionStatus
+
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    short_id = flow.store.create(
+        thread_id="acme/demo#4:no-such-thread",
+        owner="acme",
+        repo="demo",
+        pr_number=4,
+        file_path="src/Temperature.java",
+        method_label="Temperature.toCelsius",
+        head_sha="sha1",
+        installation_id="install-1",
+    )
+
+    outcome = flow.decide(short_id, "accept", owner="acme", repo="demo", pr_number=4, via="the dashboard")
+
+    assert outcome.status == DecisionStatus.EXPIRED
+    assert not fake.commits
+    assert "no longer available" in fake.comments[-1]
+    assert flow.store.get(short_id).resolved and flow.store.get(short_id).decision == "expired"
+
+
+# -- re-reviews and on-demand scans --------------------------------------------
+
+
+def test_reviewing_the_same_pr_again_does_not_repost_a_pending_proposal(monkeypatch, tmp_path):
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    first = flow.review_pull_request(pr_event())
+    second = flow.review_pull_request(pr_event(action="synchronize"))
+    assert (first.proposed, second.proposed, second.already_proposed) == (1, 0, 1)
+    assert len(fake.comments) == 1
+    assert len(flow.store.recent_proposals()) == 1
+
+
+def test_scan_reviews_every_open_pr_and_survives_a_failing_one(monkeypatch, tmp_path):
+    fake = FakeGithub(open_prs=(1, 2, 3), failing_prs=(2,))
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    outcome = flow.scan_repository("acme", "demo", "install-1")
+    assert (outcome.prs, outcome.proposed, outcome.failed_prs) == (3, 2, 1)
+    assert {r.pr_number for r in flow.store.recent_proposals()} == {1, 3}
+
+    again = flow.scan_repository("acme", "demo", "install-1")  # nothing new since the first scan
+    assert (again.proposed, again.already_proposed) == (0, 2)
+    assert len(fake.comments) == 2
+
+
+def test_a_method_with_debt_but_no_verified_fix_is_logged_with_the_reason(monkeypatch, tmp_path, caplog):
+    import logging
+
+    fake = FakeGithub()
+    # The model keeps the phantom @param: the Verifier rejects every attempt.
+    flow = make_flow(
+        monkeypatch, fake, tmp_path, lambda prompt, m: (SOURCE.split("    /**")[1].split("*/")[0], "stop")
+    )
+    with caplog.at_level(logging.INFO, logger="docdebt.service"):
+        outcome = flow.review_pull_request(pr_event())
+    assert outcome.skipped_not_proposed == 1 and not fake.comments
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("no fix proposed"))
+    assert "Temperature.toCelsius" in line and "src/Temperature.java" in line and "attempt" in line
+
+
+def test_a_decided_proposal_is_counted_as_decided_not_as_a_failed_repair(monkeypatch, tmp_path):
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    flow.review_pull_request(pr_event())
+    flow.decide(_short_id(fake), "reject", owner="acme", repo="demo", pr_number=1)
+
+    again = flow.review_pull_request(pr_event(action="synchronize"))  # same content: the rejection stands
+    assert (again.already_decided, again.skipped_not_proposed, again.proposed) == (1, 0, 0)
+    assert sum("Documentation debt" in c for c in fake.comments) == 1  # not proposed a second time
+
+
+# -- proposal details (what the dashboard shows before a decision) ----------------
+
+
+def test_proposal_details_show_the_debt_the_method_and_the_proposed_fix(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    from docdebt.graph.build import sqlite_checkpointer
+    from docdebt.service.app import create_app
+    from docdebt.service.config import ServiceSettings
+
+    settings = ServiceSettings(
+        github_app_id="1",
+        github_app_slug="app",
+        github_private_key="k",
+        github_webhook_secret="s",
+        state_db_path=tmp_path / "state.sqlite3",
+        graph_checkpoint_path=tmp_path / "graph.sqlite3",
+    )
+    fake = FakeGithub()
+    flow = make_flow(monkeypatch, fake, tmp_path, structural_fix_responder)
+    with sqlite_checkpointer(settings.graph_checkpoint_path) as saver:  # the real, on-disk checkpointer
+        flow.graph = GraphApp(flow.graph.deps, saver)
+        flow.review_pull_request(pr_event())
+    short_id = _short_id(fake)
+
+    client = TestClient(create_app(settings))
+    body = client.get(f"/api/proposals/{short_id}").json()
+    details = body["details"]
+
+    assert body["method_label"] == "Temperature.toCelsius" and body["decision"] is None
+    assert details["method"]["signature"] == "double toCelsius(double tempInKelvin)"
+    assert "return tempInKelvin - 273.15;" in details["method"]["code"]
+    assert (
+        "    /**\n" in details["method"]["source"]
+        and "\n    public double toCelsius" in details["method"]["source"]
+    )
+    assert {f["rule"] for f in details["debt"]} == {"missing-param", "unknown-param"}
+    assert "-     * @param tempInCelsius temperature in kelvin" in details["diff"]
+    assert "+     * @param tempInKelvin temperature in kelvin" in details["diff"]
+    assert {(c["field"], c["action"]) for c in details["repair"]["changes"]} == {
+        ("@param tempInCelsius", "remove"),
+        ("@param tempInKelvin", "add"),
+    }
+    assert details["repair"]["status"] == "verified" and details["repair"]["attempts"] == 1
+
+    assert client.get("/api/proposals/deadbeef").status_code == 404
+    assert client.get("/api/proposals/search").status_code == 200  # not taken for a proposal id
+
+
+def test_proposal_details_are_none_when_the_run_is_gone(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from docdebt.service.app import create_app
+    from docdebt.service.config import ServiceSettings
+
+    settings = ServiceSettings(
+        github_app_id="1",
+        github_app_slug="app",
+        github_private_key="k",
+        github_webhook_secret="s",
+        state_db_path=tmp_path / "state.sqlite3",
+        graph_checkpoint_path=tmp_path / "graph.sqlite3",
+    )
+    short_id = ReviewStore(settings.state_db_path).create(
+        thread_id="no-such-thread",
+        owner="acme",
+        repo="demo",
+        pr_number=1,
+        file_path="X.java",
+        method_label="X.f",
+        head_sha="s",
+    )
+    body = TestClient(create_app(settings)).get(f"/api/proposals/{short_id}").json()
+    assert body["short_id"] == short_id and body["details"] is None

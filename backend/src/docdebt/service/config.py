@@ -43,6 +43,13 @@ class ServiceSettings:
         state_db_path: SQLite file mapping the short ids posted in PR comments
             back to graph thread ids (see ``docdebt.service.store``).
         graph_checkpoint_path: SQLite file for the LangGraph checkpointer.
+        sync_installations_on_startup: ask GitHub, when the service starts,
+            which repositories the App is installed on (repairs a list that
+            missed installation webhooks, e.g. an App installed before the
+            service tracked them). On by default from the environment.
+        dashboard_token: shared secret the dashboard must send (``Authorization:
+            Bearer <token>``) to accept or reject a proposal. ``None`` (the
+            default) disables decisions from the dashboard: it stays read-only.
     """
 
     github_app_id: str
@@ -54,6 +61,8 @@ class ServiceSettings:
     structural_only: bool = True
     state_db_path: Path = Path(".docdebt-service/state.sqlite3")
     graph_checkpoint_path: Path = Path(".docdebt-service/graph.sqlite3")
+    dashboard_token: str | None = None
+    sync_installations_on_startup: bool = False
 
     @classmethod
     def from_env(cls) -> ServiceSettings:
@@ -73,4 +82,6 @@ class ServiceSettings:
             structural_only=os.environ.get("DOCDEBT_STRUCTURAL_ONLY", "true").lower() != "false",
             state_db_path=Path(os.environ.get("DOCDEBT_STATE_DB", ".docdebt-service/state.sqlite3")),
             graph_checkpoint_path=Path(os.environ.get("DOCDEBT_GRAPH_DB", ".docdebt-service/graph.sqlite3")),
+            dashboard_token=os.environ.get("DOCDEBT_DASHBOARD_TOKEN") or None,
+            sync_installations_on_startup=os.environ.get("DOCDEBT_SYNC_ON_STARTUP", "true").lower() != "false",
         )

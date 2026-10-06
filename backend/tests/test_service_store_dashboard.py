@@ -36,6 +36,7 @@ def test_summary_on_an_empty_store_has_no_none_values(tmp_path):
         "pending": 0,
         "accepted": 0,
         "rejected": 0,
+        "expired": 0,
         "llm_calls": 0,
         "cost_usd": 0.0,
         "tokens": 0,
@@ -104,6 +105,7 @@ def test_migration_adds_decision_column_to_a_pre_existing_database(tmp_path):
     assert request is not None and request.decision is None
     store.mark_resolved("abc", "accept")
     assert store.get("abc").decision == "accept"
+    assert store.get("abc").installation_id is None  # column added, old row has no value
 
 
 def test_repo_breakdown_surfaces_rows_resolved_before_the_decision_column_existed(tmp_path):
@@ -137,3 +139,21 @@ def test_repo_breakdown_surfaces_rows_resolved_before_the_decision_column_existe
     row = store.repo_breakdown()[0]
     assert (row["pending"], row["accepted"], row["rejected"], row["unknown"]) == (0, 0, 0, 1)
     assert row["pending"] + row["accepted"] + row["rejected"] + row["unknown"] == row["proposals"]
+
+
+def test_installation_id_is_stored_with_the_proposal_and_known_per_repo(tmp_path):
+    store = ReviewStore(tmp_path / "state.sqlite3")
+    short_id = store.create(
+        thread_id="t1",
+        owner="acme",
+        repo="demo",
+        pr_number=1,
+        file_path="X.java",
+        method_label="X.f",
+        head_sha="sha1",
+        installation_id="555",
+    )
+    assert store.get(short_id).installation_id == "555"
+    assert store.installation_for("acme", "demo") is None
+    store.connect_repository(owner="acme", repo="demo", installation_id="777")
+    assert store.installation_for("acme", "demo") == "777"
