@@ -10,9 +10,11 @@ about thread ids, never about PR comments.
 from __future__ import annotations
 
 import json
+import secrets
 import sqlite3
 import time
 import uuid
+from collections.abc import Iterable
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +71,35 @@ CREATE TABLE IF NOT EXISTS scans (
 );
 CREATE INDEX IF NOT EXISTS idx_scans_repo ON scans (owner, repo, started_at);
 
+CREATE TABLE IF NOT EXISTS users (
+    github_id    INTEGER PRIMARY KEY,
+    login        TEXT NOT NULL,
+    name         TEXT,
+    avatar_url   TEXT,
+    created_at   REAL NOT NULL,
+    last_login   REAL NOT NULL
+);
+
+-- A browser session after "Sign in with GitHub". The id is random and only
+-- lives in an HttpOnly cookie; the GitHub user token is kept server-side.
+CREATE TABLE IF NOT EXISTS sessions (
+    id            TEXT PRIMARY KEY,
+    github_id     INTEGER NOT NULL,
+    access_token  TEXT NOT NULL,
+    created_at    REAL NOT NULL,
+    expires_at    REAL NOT NULL
+);
+
+-- The repositories a user works on: added by hand or imported at sign-in,
+-- always ones they can push to.
+CREATE TABLE IF NOT EXISTS user_repos (
+    github_id  INTEGER NOT NULL,
+    owner      TEXT NOT NULL,
+    repo       TEXT NOT NULL,
+    added_at   REAL NOT NULL,
+    PRIMARY KEY (github_id, owner, repo)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key         TEXT PRIMARY KEY,
     value       TEXT NOT NULL,   -- JSON
@@ -84,6 +115,18 @@ CREATE TABLE IF NOT EXISTS installations (
     PRIMARY KEY (owner, repo)
 );
 """
+
+
+def _visible_clause(visible: Iterable[str] | None, alias: str = "") -> tuple[str, list[str]]:
+    """SQL restricting rows to the ``visible`` repositories ("owner/repo"
+    names). ``None`` means no restriction (local mode, one operator); an empty
+    collection matches nothing."""
+    if visible is None:
+        return "", []
+    names = sorted(set(visible))
+    if not names:
+        return "0", []
+    return f"({alias}owner || '/' || {alias}repo) IN ({', '.join('?' * len(names))})", names
 
 
 _STATUS_CLAUSES = {
@@ -306,8 +349,11 @@ class ReviewStore:
                 ),
             )
 
-    def summary(self) -> dict:
-        """Totals across every repository this instance has ever reviewed."""
+    def summary(self, visible: Iterable[str] | None = None) -> dict:
+        """Totals across every repository this instance has ever reviewed, or
+        across ``visible`` ("owner/repo" names) only."""
+        where, params = _visible_clause(visible)
+        where = f"WHERE {where}" if where else ""
         with self._connect() as conn:
             requests = conn.execute(
                 "SELECT COUNT(*) AS n, "
@@ -315,15 +361,17 @@ class ReviewStore:
                 "SUM(CASE WHEN decision = 'accept' THEN 1 ELSE 0 END) AS accepted, "
                 "SUM(CASE WHEN decision = 'reject' THEN 1 ELSE 0 END) AS rejected, "
                 "SUM(CASE WHEN decision = 'expired' THEN 1 ELSE 0 END) AS expired "
-                "FROM review_requests"
+                f"FROM review_requests {where}",
+                params,
             ).fetchone()
             usage = conn.execute(
                 "SELECT COALESCE(SUM(calls), 0) AS calls, COALESCE(SUM(cost_usd), 0) AS cost_usd, "
                 "COALESCE(SUM(input_tokens + output_tokens), 0) AS tokens, "
-                "COALESCE(AVG(latency_s), 0) AS avg_latency_s FROM llm_usage"
+                f"COALESCE(AVG(latency_s), 0) AS avg_latency_s FROM llm_usage {where}",
+                params,
             ).fetchone()
             repos = conn.execute(
-                "SELECT COUNT(DISTINCT owner || '/' || repo) AS n FROM review_requests"
+                f"SELECT COUNT(DISTINCT owner || '/' || repo) AS n FROM review_requests {where}", params
             ).fetchone()
         return {
             "repositories": repos["n"],
@@ -338,7 +386,7 @@ class ReviewStore:
             "avg_latency_s": round(usage["avg_latency_s"], 2),
         }
 
-    def repo_breakdown(self) -> list[dict]:
+    def repo_breakdown(self, visible: Iterable[str] | None = None) -> list[dict]:
         """One row per repository: proposal counts and cost, most active first.
 
         ``unknown`` counts rows that are resolved but whose decision was never
@@ -350,6 +398,8 @@ class ReviewStore:
         ``pending + accepted + rejected + expired + unknown`` always equals
         ``proposals``.
         """
+        where, params = _visible_clause(visible, alias="r.")
+        where = f"WHERE {where} " if where else ""
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT r.owner, r.repo, COUNT(*) AS proposals, "
@@ -360,7 +410,8 @@ class ReviewStore:
                 "SUM(CASE WHEN r.resolved = 1 AND r.decision IS NULL THEN 1 ELSE 0 END) AS unknown, "
                 "COALESCE((SELECT SUM(u.cost_usd) FROM llm_usage u "
                 "          WHERE u.owner = r.owner AND u.repo = r.repo), 0) AS cost_usd "
-                "FROM review_requests r GROUP BY r.owner, r.repo ORDER BY proposals DESC"
+                f"FROM review_requests r {where}GROUP BY r.owner, r.repo ORDER BY proposals DESC",
+                params,
             ).fetchall()
         return [
             {
@@ -377,11 +428,13 @@ class ReviewStore:
             for row in rows
         ]
 
-    def recent_proposals(self, limit: int = 20) -> list[ReviewRequest]:
-        """The most recently created proposals, across all repositories."""
+    def recent_proposals(self, limit: int = 20, visible: Iterable[str] | None = None) -> list[ReviewRequest]:
+        """The most recently created proposals, across all (or ``visible``) repositories."""
+        where, params = _visible_clause(visible)
+        where = f"WHERE {where} " if where else ""
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT * FROM review_requests ORDER BY created_at DESC LIMIT ?", (limit,)
+                f"SELECT * FROM review_requests {where}ORDER BY created_at DESC LIMIT ?", [*params, limit]
             ).fetchall()
         return [self._to_request(row) for row in rows]
 
@@ -396,6 +449,7 @@ class ReviewStore:
         until: float | None = None,
         limit: int = 25,
         offset: int = 0,
+        visible: Iterable[str] | None = None,
     ) -> tuple[list[ReviewRequest], int]:
         """One page of proposals, newest first, and the total matching count.
 
@@ -406,6 +460,10 @@ class ReviewStore:
         """
         clauses: list[str] = []
         params: list[object] = []
+        visible_where, visible_params = _visible_clause(visible)
+        if visible_where:
+            clauses.append(visible_where)
+            params.extend(visible_params)
         if owner is not None:
             clauses.append("owner = ?")
             params.append(owner)
@@ -530,6 +588,68 @@ class ReviewStore:
                 (time.time(), reason),
             )
 
+    # -- users, sessions and their repositories (Sign in with GitHub) -------------
+
+    def upsert_user(self, *, github_id: int, login: str, name: str | None, avatar_url: str | None) -> None:
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO users (github_id, login, name, avatar_url, created_at, last_login) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(github_id) DO UPDATE SET login = excluded.login, "
+                "name = excluded.name, avatar_url = excluded.avatar_url, last_login = excluded.last_login",
+                (github_id, login, name, avatar_url, now, now),
+            )
+
+    def create_session(self, github_id: int, access_token: str, ttl_s: float) -> str:
+        session_id = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
+            conn.execute(
+                "INSERT INTO sessions (id, github_id, access_token, created_at, expires_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (session_id, github_id, access_token, now, now + ttl_s),
+            )
+        return session_id
+
+    def session_user(self, session_id: str | None) -> dict | None:
+        """The signed-in user behind a session cookie (with its GitHub token),
+        or ``None`` for a missing, unknown or expired session."""
+        if not session_id:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT u.github_id, u.login, u.name, u.avatar_url, s.access_token FROM sessions s "
+                "JOIN users u ON u.github_id = s.github_id WHERE s.id = ? AND s.expires_at > ?",
+                (session_id, time.time()),
+            ).fetchone()
+        return dict(row) if row else None
+
+    def delete_session(self, session_id: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
+
+    def add_user_repo(self, github_id: int, owner: str, repo: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO user_repos (github_id, owner, repo, added_at) VALUES (?, ?, ?, ?)",
+                (github_id, owner, repo, time.time()),
+            )
+
+    def remove_user_repo(self, github_id: int, owner: str, repo: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM user_repos WHERE github_id = ? AND owner = ? AND repo = ?", (github_id, owner, repo)
+            )
+
+    def user_repos(self, github_id: int) -> list[str]:
+        """The user's repositories as "owner/repo" names."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT owner, repo FROM user_repos WHERE github_id = ? ORDER BY owner, repo", (github_id,)
+            ).fetchall()
+        return [f"{row['owner']}/{row['repo']}" for row in rows]
+
     # -- settings overrides (edited from the dashboard) -------------------------
 
     def get_settings(self) -> dict[str, object]:
@@ -552,7 +672,14 @@ class ReviewStore:
         with self._connect() as conn:
             conn.execute("DELETE FROM settings")
 
-    def usage_series(self, days: int = 14, *, owner: str | None = None, repo: str | None = None) -> list[dict]:
+    def usage_series(
+        self,
+        days: int = 14,
+        *,
+        owner: str | None = None,
+        repo: str | None = None,
+        visible: Iterable[str] | None = None,
+    ) -> list[dict]:
         """Daily totals (UTC) for the last ``days`` days, oldest first, one row
         per day even where no run happened (cost and calls at 0) so a chart
         does not have to guess at gaps. ``owner``/``repo`` restrict it to one
@@ -565,6 +692,10 @@ class ReviewStore:
         params: list[object] = [time.mktime(start.timetuple())]
         if repo_filter:
             params.extend([owner, repo])
+        visible_where, visible_params = _visible_clause(visible)
+        if visible_where:
+            repo_filter += f" AND {visible_where}"
+            params.extend(visible_params)
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT date(created_at, 'unixepoch') AS day, SUM(calls) AS calls, "

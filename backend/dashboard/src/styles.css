@@ -888,3 +888,366 @@ a.page-btn:hover {
 .changes td.muted {
   color: var(--ink-faint);
 }
+
+/* -- presentation: intro on the overview, "How it works" page -- */
+
+.intro {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  background: linear-gradient(90deg, var(--action-dim), var(--surface));
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--action);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+.intro p {
+  margin: 0;
+  flex: 1 1 420px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.intro code,
+.step-text code,
+.step-example code,
+.problem code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  background: var(--surface-raised);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.intro-link {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.lead {
+  font-size: 15px;
+  color: var(--ink-dim);
+  max-width: 760px;
+  margin: -6px 0 24px;
+}
+
+.problem {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+.problem .section-title {
+  margin-top: 0;
+}
+@media (max-width: 760px) {
+  .problem {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pipeline {
+  list-style: none;
+  margin: 0 0 32px;
+  padding: 0;
+}
+.step {
+  display: grid;
+  grid-template-columns: 40px 1fr;
+  gap: 14px;
+}
+.step-rail {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+/* the vertical line joining the steps */
+.step-rail::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+}
+.step:first-child .step-rail::before {
+  top: 18px;
+}
+.step:last-child .step-rail::before {
+  bottom: calc(100% - 18px);
+}
+.step-node {
+  position: relative;
+  z-index: 1;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 13px;
+  margin-top: 4px;
+  background: var(--surface-raised);
+  border: 2px solid var(--ink-faint);
+  color: var(--ink);
+}
+.step-node.exact {
+  border-color: var(--accepted);
+  color: var(--accepted);
+}
+.step-node.llm {
+  border-color: var(--pending);
+  color: var(--pending);
+}
+.step-node.human {
+  border-color: var(--action);
+  color: var(--action);
+}
+.step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.step-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.step-head h3 {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+}
+.step-kind {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--ink-dim);
+}
+.step-kind.exact {
+  color: var(--accepted);
+  border-color: var(--accepted-dim);
+}
+.step-kind.llm {
+  color: var(--pending);
+  border-color: var(--pending-dim);
+}
+.step-kind.human {
+  color: var(--action);
+  border-color: var(--action-dim);
+}
+.step-text {
+  font-size: 13px;
+  color: var(--ink-dim);
+  margin: 0;
+  max-width: 760px;
+}
+.step-example {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.step-example .code-block {
+  margin: 4px 0 0;
+}
+.mini-findings {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.step-branch {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.guarantees {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.guarantee-title {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+.how-next {
+  margin-top: 20px;
+}
+.step-example .quote-label {
+  display: block;
+}
+
+/* -- home page, sign-in, repositories -- */
+
+.topbar .nav {
+  flex: 1;
+}
+.user-menu {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+}
+.user-login {
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+
+.github-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: var(--radius);
+  padding: 6px 14px;
+  font-weight: 600;
+  font-size: 13px;
+}
+.github-btn:hover {
+  text-decoration: none;
+  opacity: 0.9;
+}
+.github-btn.big,
+.primary-btn.big,
+.page-btn.big {
+  padding: 10px 20px;
+  font-size: 15px;
+}
+a.primary-btn {
+  display: inline-block;
+}
+a.primary-btn:hover {
+  text-decoration: none;
+}
+
+.home {
+  max-width: 900px;
+}
+.hero {
+  padding: 36px 0 28px;
+}
+.eyebrow {
+  color: var(--action);
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.hero h1 {
+  font-size: 38px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  margin: 0 0 14px;
+}
+.hero-sub {
+  font-size: 17px;
+  color: var(--ink-dim);
+  max-width: 680px;
+  margin: 0 0 24px;
+}
+.hero-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.features code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.start-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.start-steps li {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.start-steps .step-node {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+.start-steps p {
+  margin: 2px 0 0;
+}
+.start-steps code {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+
+.add-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  margin-bottom: 24px;
+}
+.add-panel .field-help {
+  margin-bottom: 10px;
+}
+.install-card {
+  margin-top: 12px;
+  border: 1px solid var(--pending-dim);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 13px;
+}
+.install-card p {
+  margin: 0 0 8px;
+}
+.install-card ol {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.repo-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.repo-item .repo-row {
+  flex: 1;
+  min-width: 0;
+}
+@media (max-width: 600px) {
+  .hero h1 {
+    font-size: 28px;
+  }
+}

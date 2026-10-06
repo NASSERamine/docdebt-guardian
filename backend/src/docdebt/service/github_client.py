@@ -123,6 +123,16 @@ class GithubClient:
                 break
         return found
 
+    def get_repo_installation(self, owner: str, repo: str) -> dict | None:
+        """The App's installation on ``owner/repo``, or ``None`` if the App is
+        not installed there (asked as the App, so it works for any repository)."""
+        try:
+            return self._app_get(f"/repos/{owner}/{repo}/installation").json()
+        except GithubApiError as exc:
+            if exc.status_code == 404:
+                return None
+            raise
+
     def list_installation_repositories(self, *, max_pages: int = 10) -> list[dict]:
         """The repositories this client's installation gives access to."""
         found: list[dict] = []

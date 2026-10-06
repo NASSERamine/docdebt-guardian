@@ -344,13 +344,13 @@ def _decide(client, short_id, decision="accept", token=DASHBOARD_TOKEN):
 
 def test_dashboard_decisions_are_disabled_without_a_configured_token(client, app_settings):
     short_id = _proposal(app_settings)
-    assert client.get("/api/dashboard-config").json() == {"decisions_enabled": False}
+    assert client.get("/api/dashboard-config").json()["decisions_enabled"] is False
     assert _decide(client, short_id).status_code == 403
 
 
 def test_dashboard_decision_requires_the_right_token(decide_client, app_settings):
     short_id = _proposal(app_settings)
-    assert decide_client.get("/api/dashboard-config").json() == {"decisions_enabled": True}
+    assert decide_client.get("/api/dashboard-config").json()["decisions_enabled"] is True
     assert _decide(decide_client, short_id, token=None).status_code == 401
     assert _decide(decide_client, short_id, token="wrong").status_code == 401
     assert decide_client.app.state.decide_calls == []

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ConnectButton, ProposalList, StateNote, repoPath } from "../components.jsx";
+import { ProposalList, StateNote, repoPath } from "../components.jsx";
 import { useApi, useDecision } from "../hooks.js";
 import UsageChart from "../UsageChart.jsx";
 
@@ -24,12 +24,20 @@ function StatusLine({ summary }) {
   );
 }
 
-function RepoList({ repos, connectUrl }) {
+function AddRepositoryLink() {
+  return (
+    <Link className="connect-btn" to="/repositories">
+      + Add a repository
+    </Link>
+  );
+}
+
+function RepoList({ repos }) {
   if (repos.length === 0) {
     return (
       <div className="empty-state">
-        <p>No repository connected yet. Install the App on a repository to start reviewing its documentation.</p>
-        <ConnectButton connectUrl={connectUrl} />
+        <p>No repository yet. Add one to start reviewing its documentation.</p>
+        <AddRepositoryLink />
       </div>
     );
   }
@@ -37,7 +45,7 @@ function RepoList({ repos, connectUrl }) {
     <>
       <div className="panel-actions">
         <span />
-        <ConnectButton connectUrl={connectUrl} />
+        <AddRepositoryLink />
       </div>
       <ul className="repo-list">
         {repos.map((r) => (
@@ -69,7 +77,7 @@ function RepoList({ repos, connectUrl }) {
 
 export default function Overview() {
   const { data, error, loading, refresh } = useApi(
-    ["/api/summary", "/api/repos", "/api/proposals?limit=10", "/api/usage?days=14", "/api/connect-url", "/api/dashboard-config"],
+    ["/api/summary", "/api/repos", "/api/proposals?limit=10", "/api/usage?days=14", "/api/dashboard-config"],
     { refreshMs: REFRESH_MS },
   );
   const decisions = useDecision(refresh);
@@ -77,14 +85,24 @@ export default function Overview() {
   return (
     <StateNote error={!data && error} loading={!data && loading}>
       {data && (() => {
-        const [summary, repos, proposals, usage, connect, config] = data;
+        const [summary, repos, proposals, usage, config] = data;
         return (
           <>
+            <section className="intro">
+              <p>
+                <strong>DocDebt Guardian</strong> finds Java documentation that no longer matches its code — a renamed
+                parameter, a missing <code>@return</code>, a description the code contradicts — in every pull request, and
+                proposes a verified fix that a person accepts or rejects.
+              </p>
+              <Link to="/how-it-works" className="intro-link">
+                How it works →
+              </Link>
+            </section>
             <StatusLine summary={summary} />
             <div className="columns">
               <div className="panel">
                 <h2>Repositories</h2>
-                <RepoList repos={repos} connectUrl={connect.url} />
+                <RepoList repos={repos} />
               </div>
               <div className="panel">
                 <div className="panel-heading">

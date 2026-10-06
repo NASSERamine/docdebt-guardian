@@ -47,6 +47,15 @@ class ServiceSettings:
             which repositories the App is installed on (repairs a list that
             missed installation webhooks, e.g. an App installed before the
             service tracked them). On by default from the environment.
+        github_client_id / github_client_secret: the App's OAuth credentials
+            (App page → "Client ID", "Generate a new client secret"). When
+            both are set, the dashboard becomes a multi-user application:
+            people sign in with GitHub and each one sees only the
+            repositories they can push to. When unset: local mode, one
+            operator, the dashboard token below.
+        public_url: where people open the service (the OAuth callback is
+            ``<public_url>/auth/callback``; it must match the App's
+            "Callback URL").
         dashboard_token: shared secret the dashboard must send (``Authorization:
             Bearer <token>``) to accept or reject a proposal. ``None`` (the
             default) disables decisions from the dashboard: it stays read-only.
@@ -62,7 +71,15 @@ class ServiceSettings:
     state_db_path: Path = Path(".docdebt-service/state.sqlite3")
     graph_checkpoint_path: Path = Path(".docdebt-service/graph.sqlite3")
     dashboard_token: str | None = None
+    github_client_id: str | None = None
+    github_client_secret: str | None = None
+    public_url: str = "http://localhost:8000"
     sync_installations_on_startup: bool = False
+
+    @property
+    def auth_enabled(self) -> bool:
+        """Multi-user mode: "Sign in with GitHub" instead of a shared token."""
+        return bool(self.github_client_id and self.github_client_secret)
 
     @classmethod
     def from_env(cls) -> ServiceSettings:
@@ -83,5 +100,8 @@ class ServiceSettings:
             state_db_path=Path(os.environ.get("DOCDEBT_STATE_DB", ".docdebt-service/state.sqlite3")),
             graph_checkpoint_path=Path(os.environ.get("DOCDEBT_GRAPH_DB", ".docdebt-service/graph.sqlite3")),
             dashboard_token=os.environ.get("DOCDEBT_DASHBOARD_TOKEN") or None,
+            github_client_id=os.environ.get("DOCDEBT_GITHUB_CLIENT_ID") or None,
+            github_client_secret=os.environ.get("DOCDEBT_GITHUB_CLIENT_SECRET") or None,
+            public_url=(os.environ.get("DOCDEBT_PUBLIC_URL") or "http://localhost:8000").rstrip("/"),
             sync_installations_on_startup=os.environ.get("DOCDEBT_SYNC_ON_STARTUP", "true").lower() != "false",
         )

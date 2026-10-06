@@ -14,9 +14,11 @@ import json
 import logging
 import threading
 from contextlib import contextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
 
+import httpx
 from fastapi import BackgroundTasks, Depends, FastAPI, Header, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -24,6 +26,20 @@ from pydantic import BaseModel
 
 from docdebt.graph.build import GraphApp, GraphMode, build_graph_deps, sqlite_checkpointer
 from docdebt.llm.client import UsageTracker
+from docdebt.service.auth import (
+    SESSION_COOKIE,
+    SESSION_TTL_S,
+    STATE_COOKIE,
+    STATE_TTL_S,
+    AuthError,
+    GithubUser,
+    authorize_url,
+    can_push,
+    exchange_code,
+    install_url,
+    new_state,
+    parse_repo_ref,
+)
 from docdebt.service.commands import parse_slash_command
 from docdebt.service.config import ServiceSettings
 from docdebt.service.github_client import GithubApiError, GithubClient
@@ -93,7 +109,19 @@ def _show_service_logs() -> None:
     package_logger.setLevel(logging.INFO)
 
 
-def create_app(settings: ServiceSettings | None = None) -> FastAPI:
+@dataclass(frozen=True)
+class Viewer:
+    """Who is asking. ``visible`` is ``None`` in local mode (one operator sees
+    everything), else the "owner/repo" names of the signed-in user's repositories."""
+
+    user: dict | None
+    visible: list[str] | None
+
+    def can_see(self, owner: str, repo: str) -> bool:
+        return self.visible is None or f"{owner}/{repo}" in self.visible
+
+
+def create_app(settings: ServiceSettings | None = None, *, github_http: httpx.Client | None = None) -> FastAPI:
     settings = settings or ServiceSettings.from_env()
     _show_service_logs()
     store = ReviewStore(settings.state_db_path)
@@ -119,6 +147,100 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         provided = (authorization or "").removeprefix("Bearer ").strip()
         if not hmac.compare_digest(provided.encode(), settings.dashboard_token.encode()):
             raise HTTPException(status_code=401, detail="Invalid or missing dashboard token.")
+
+    # Calls to GitHub made for the dashboard (sign-in, repository checks);
+    # tests inject a fake transport here.
+    http = github_http or httpx.Client(timeout=30.0)
+
+    def viewer(request: Request) -> Viewer:
+        """Everything in local mode; in sign-in mode, the signed-in user's
+        repositories only (401 when nobody is signed in)."""
+        if not settings.auth_enabled:
+            return Viewer(user=None, visible=None)
+        user = store.session_user(request.cookies.get(SESSION_COOKIE))
+        if user is None:
+            raise HTTPException(status_code=401, detail="Sign in with GitHub first.")
+        return Viewer(user=user, visible=store.user_repos(user["github_id"]))
+
+    def change_allowed(request: Request, authorization: str | None = Header(default=None)) -> Viewer:
+        """Guard for every endpoint that changes something: a signed-in user in
+        sign-in mode, the dashboard token in local mode."""
+        if settings.auth_enabled:
+            return viewer(request)
+        require_dashboard_token(authorization)
+        return Viewer(user=None, visible=None)
+
+    def not_found_unless_visible(v: Viewer, owner: str, repo: str) -> None:
+        # 404, not 403: do not reveal that a repository someone else works on exists.
+        if not v.can_see(owner, repo):
+            raise HTTPException(status_code=404, detail=f"Nothing is known about {owner}/{repo}.")
+
+    # -- sign in with GitHub -------------------------------------------------------
+
+    @app.get("/api/me")
+    def api_me(request: Request) -> dict:
+        user = store.session_user(request.cookies.get(SESSION_COOKIE)) if settings.auth_enabled else None
+        return {
+            "auth_enabled": settings.auth_enabled,
+            "user": {k: user[k] for k in ("github_id", "login", "name", "avatar_url")} if user else None,
+        }
+
+    @app.get("/auth/login", include_in_schema=False)
+    def auth_login() -> Response:
+        if not settings.auth_enabled:
+            raise HTTPException(status_code=404, detail="Sign-in is not configured.")
+        state = new_state()
+        response = Response(status_code=307, headers={"Location": authorize_url(settings, state)})
+        response.set_cookie(
+            STATE_COOKIE, state, max_age=STATE_TTL_S, httponly=True, samesite="lax", secure=_secure(settings)
+        )
+        return response
+
+    @app.get("/auth/callback", include_in_schema=False)
+    def auth_callback(request: Request, code: str = "", state: str = "") -> Response:
+        if not settings.auth_enabled:
+            raise HTTPException(status_code=404, detail="Sign-in is not configured.")
+        expected = request.cookies.get(STATE_COOKIE) or ""
+        if not code or not state or not hmac.compare_digest(state.encode(), expected.encode()):
+            return _redirect("/dashboard/?login_error=state")
+        try:
+            token = exchange_code(settings, code, http)
+            profile = GithubUser(token, http).profile()
+        except (AuthError, GithubApiError, httpx.HTTPError) as exc:
+            logger.warning("sign-in failed: %s", exc)
+            return _redirect("/dashboard/?login_error=github")
+        store.upsert_user(
+            github_id=profile["id"],
+            login=profile["login"],
+            name=profile.get("name"),
+            avatar_url=profile.get("avatar_url"),
+        )
+        try:
+            imported = _import_user_repos(store, GithubUser(token, http), profile["id"])
+            logger.info("%s signed in; %s repositories imported", profile["login"], len(imported))
+        except (GithubApiError, httpx.HTTPError):
+            logger.exception("could not import the repositories of %s", profile["login"])
+        session_id = store.create_session(profile["id"], token, SESSION_TTL_S)
+        response = _redirect("/dashboard/overview")
+        response.set_cookie(
+            SESSION_COOKIE,
+            session_id,
+            max_age=SESSION_TTL_S,
+            httponly=True,
+            samesite="lax",
+            secure=_secure(settings),
+        )
+        response.delete_cookie(STATE_COOKIE)
+        return response
+
+    @app.post("/auth/logout")
+    def auth_logout(request: Request) -> Response:
+        session_id = request.cookies.get(SESSION_COOKIE)
+        if session_id:
+            store.delete_session(session_id)
+        response = Response(status_code=204)
+        response.delete_cookie(SESSION_COOKIE)
+        return response
 
     @app.get("/health")
     def health() -> dict:
@@ -161,16 +283,16 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         return Response(status_code=202)
 
     @app.get("/api/summary")
-    def api_summary() -> dict:
-        return store.summary()
+    def api_summary(v: Viewer = Depends(viewer)) -> dict:
+        return store.summary(v.visible)
 
     @app.get("/api/repos")
-    def api_repos() -> list[dict]:
+    def api_repos(v: Viewer = Depends(viewer)) -> list[dict]:
         """Every repository the App knows: installed now, installed before
         (``connected`` false, ``installed_before`` true), or with recorded
         activity only."""
-        installs = {(r["owner"], r["repo"]): r for r in store.installations()}
-        activity = {(r["owner"], r["repo"]): r for r in store.repo_breakdown()}
+        installs = {(r["owner"], r["repo"]): r for r in store.installations() if v.can_see(r["owner"], r["repo"])}
+        activity = {(r["owner"], r["repo"]): r for r in store.repo_breakdown(v.visible)}
         rows = []
         for key in sorted(set(installs) | set(activity)):
             owner, repo = key
@@ -187,7 +309,10 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         return rows
 
     @app.get("/api/repos/{owner}/{repo}")
-    def api_repo_detail(owner: str, repo: str, days: Annotated[int, Query(ge=1, le=365)] = 30) -> dict:
+    def api_repo_detail(
+        owner: str, repo: str, days: Annotated[int, Query(ge=1, le=365)] = 30, v: Viewer = Depends(viewer)
+    ) -> dict:
+        not_found_unless_visible(v, owner, repo)
         install = next((r for r in store.installations() if (r["owner"], r["repo"]) == (owner, repo)), None)
         stats = store.repo_stats(owner, repo)
         if install is None and stats["proposals"] == 0 and stats["llm_calls"] == 0:
@@ -204,11 +329,79 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             "last_scan": store.latest_scan(owner, repo),
         }
 
-    @app.post("/api/repos/{owner}/{repo}/scan", status_code=202, dependencies=[Depends(require_dashboard_token)])
-    def api_scan(owner: str, repo: str, background_tasks: BackgroundTasks) -> dict:
+    @app.post("/api/repos")
+    def api_add_repo(body: AddRepoBody, v: Viewer = Depends(change_allowed)) -> dict:
+        """Add a repository by its exact name or GitHub URL.
+
+        Signed in: it must exist, the user must be able to push to it, and
+        the App must be installed on it. Answers ``connected``, or
+        ``not_installed`` with the GitHub page that installs the App.
+        """
+        ref = parse_repo_ref(body.repo)
+        if ref is None:
+            raise HTTPException(
+                status_code=422, detail="Write the repository as owner/name, or paste its GitHub URL."
+            )
+        owner, repo = ref
+        owner_id = None
+        if v.user is not None:
+            try:
+                repository = GithubUser(v.user["access_token"], http).repository(owner, repo)
+            except GithubApiError as exc:
+                if exc.status_code == 401:
+                    raise HTTPException(
+                        status_code=401, detail="Your GitHub sign-in expired: sign in again."
+                    ) from exc
+                raise HTTPException(status_code=502, detail=f"GitHub refused the request: {exc}") from exc
+            if repository is None:
+                raise HTTPException(
+                    status_code=404, detail=f"{owner}/{repo} does not exist, or your GitHub account cannot see it."
+                )
+            if not can_push(repository):
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"You cannot push to {repository['full_name']}: accepting a fix commits to it, "
+                    "so only people with write access can add it.",
+                )
+            owner, repo = repository["owner"]["login"], repository["name"]  # GitHub's exact spelling
+            owner_id = repository["owner"]["id"]
+        try:
+            installation = GithubClient(
+                settings.github_app_id, settings.github_private_key, "", http=http
+            ).get_repo_installation(owner, repo)
+        except GithubApiError as exc:
+            raise HTTPException(status_code=502, detail=f"GitHub refused the request: {exc}") from exc
+        if installation is None:
+            return {
+                "status": "not_installed",
+                "owner": owner,
+                "repo": repo,
+                "install_url": install_url(settings, owner_id),
+            }
+        store.connect_repository(owner=owner, repo=repo, installation_id=str(installation["id"]))
+        if v.user is not None:
+            store.add_user_repo(v.user["github_id"], owner, repo)
+        return {"status": "connected", "owner": owner, "repo": repo}
+
+    @app.delete("/api/repos/{owner}/{repo}", status_code=204)
+    def api_remove_repo(owner: str, repo: str, v: Viewer = Depends(change_allowed)) -> Response:
+        """Take a repository off the signed-in user's list (the App stays
+        installed: that is managed on GitHub)."""
+        if v.user is None:
+            raise HTTPException(
+                status_code=400, detail="Only in sign-in mode: in local mode, uninstall on GitHub."
+            )
+        store.remove_user_repo(v.user["github_id"], owner, repo)
+        return Response(status_code=204)
+
+    @app.post("/api/repos/{owner}/{repo}/scan", status_code=202)
+    def api_scan(
+        owner: str, repo: str, background_tasks: BackgroundTasks, v: Viewer = Depends(change_allowed)
+    ) -> dict:
         """Review every open pull request of a connected repository now, as if
         GitHub had sent a webhook for each. Returns at once; poll
         ``GET /api/scans/{id}`` for the result."""
+        not_found_unless_visible(v, owner, repo)
         install = next(
             (r for r in store.installations() if (r["owner"], r["repo"]) == (owner, repo) and r["active"]), None
         )
@@ -229,25 +422,28 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         background_tasks.add_task(_run_scan, settings, store, scan_id, owner, repo, install["installation_id"])
         return store.get_scan(scan_id)
 
-    @app.post("/api/installations/sync", dependencies=[Depends(require_dashboard_token)])
-    def api_sync_installations() -> dict:
+    @app.post("/api/installations/sync")
+    def api_sync_installations(v: Viewer = Depends(change_allowed)) -> dict:
         """Ask GitHub which repositories the App is installed on, and update
         the list: for repositories whose installation webhook was missed."""
         try:
-            return sync_installations(settings, store)
+            result = sync_installations(settings, store)
+            if v.user is not None:
+                _import_user_repos(store, GithubUser(v.user["access_token"], http), v.user["github_id"])
+            return result
         except GithubApiError as exc:
             raise HTTPException(status_code=502, detail=f"GitHub refused the request: {exc}") from exc
 
     @app.get("/api/scans/{scan_id}")
-    def api_scan_status(scan_id: int) -> dict:
+    def api_scan_status(scan_id: int, v: Viewer = Depends(viewer)) -> dict:
         scan = store.get_scan(scan_id)
-        if scan is None:
+        if scan is None or not v.can_see(scan["owner"], scan["repo"]):
             raise HTTPException(status_code=404, detail=f"No scan with id {scan_id}.")
         return scan
 
     @app.get("/api/proposals")
-    def api_proposals(limit: int = 20) -> list[dict]:
-        return [_proposal_json(r) for r in store.recent_proposals(limit)]
+    def api_proposals(limit: int = 20, v: Viewer = Depends(viewer)) -> list[dict]:
+        return [_proposal_json(r) for r in store.recent_proposals(limit, v.visible)]
 
     @app.get("/api/proposals/search")
     def api_proposals_search(
@@ -258,6 +454,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         until: Annotated[datetime.date | None, Query(description="last day included (UTC)")] = None,
         page: Annotated[int, Query(ge=1)] = 1,
         page_size: Annotated[int, Query(ge=1, le=100)] = 25,
+        v: Viewer = Depends(viewer),
     ) -> dict:
         owner = name = None
         if repo:
@@ -273,6 +470,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             until=_day_start(until + datetime.timedelta(days=1)) if until else None,
             limit=page_size,
             offset=(page - 1) * page_size,
+            visible=v.visible,
         )
         return {
             "items": [_proposal_json(r) for r in items],
@@ -283,13 +481,13 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         }
 
     @app.get("/api/proposals/{short_id}")
-    def api_proposal_detail(short_id: str) -> dict:
+    def api_proposal_detail(short_id: str, v: Viewer = Depends(viewer)) -> dict:
         """One proposal with what it is about: the debt found, the method,
         the current and proposed Javadoc and their diff, read back from the
         graph's checkpoint. ``details`` is ``None`` when that run is gone.
         Declared after ``/api/proposals/search`` so "search" is not taken for an id."""
         request = store.get(short_id)
-        if request is None:
+        if request is None or not v.can_see(request.owner, request.repo):
             raise HTTPException(status_code=404, detail=f"No proposal with id {short_id}.")
         with sqlite_checkpointer(settings.graph_checkpoint_path) as saver:
             values = read_thread_values(saver, request.thread_id)
@@ -309,17 +507,17 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
             "spent_usd": round(store.total_cost_usd(), 4),
         }
 
-    @app.get("/api/settings")
+    @app.get("/api/settings", dependencies=[Depends(viewer)])
     def api_settings() -> dict:
         return _settings_json()
 
-    @app.put("/api/settings", dependencies=[Depends(require_dashboard_token)])
+    @app.put("/api/settings", dependencies=[Depends(change_allowed)])
     def api_update_settings(body: RuntimeSettings) -> dict:
         """Save every value of ``body``; they apply from the next webhook on."""
         store.save_settings(body.model_dump())
         return _settings_json()
 
-    @app.delete("/api/settings", dependencies=[Depends(require_dashboard_token)])
+    @app.delete("/api/settings", dependencies=[Depends(change_allowed)])
     def api_reset_settings() -> dict:
         """Forget every saved value: back to the environment defaults."""
         store.clear_settings()
@@ -327,10 +525,13 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
 
     @app.get("/api/dashboard-config")
     def api_dashboard_config() -> dict:
-        return {"decisions_enabled": settings.dashboard_token is not None}
+        return {
+            "decisions_enabled": settings.auth_enabled or settings.dashboard_token is not None,
+            "auth_enabled": settings.auth_enabled,
+        }
 
-    @app.post("/api/proposals/{short_id}/decide", dependencies=[Depends(require_dashboard_token)])
-    def api_decide(short_id: str, body: DecisionBody) -> dict:
+    @app.post("/api/proposals/{short_id}/decide")
+    def api_decide(short_id: str, body: DecisionBody, v: Viewer = Depends(change_allowed)) -> dict:
         """Accept or reject a proposal from the dashboard: the same graph resume,
         commit and PR comment as a ``/docdebt accept|reject <id>`` reply.
 
@@ -338,7 +539,7 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         the dashboard gets the real outcome, not just "queued".
         """
         request = store.get(short_id)
-        if request is None:
+        if request is None or not v.can_see(request.owner, request.repo):
             raise HTTPException(status_code=404, detail=f"No proposal with id {short_id}.")
         if request.resolved:
             raise HTTPException(status_code=409, detail=f"Proposal {short_id} is already resolved.")
@@ -360,8 +561,8 @@ def create_app(settings: ServiceSettings | None = None) -> FastAPI:
         return {"status": outcome.status.value, "message": outcome.message, "commit_sha": outcome.commit_sha}
 
     @app.get("/api/usage")
-    def api_usage(days: Annotated[int, Query(ge=1, le=365)] = 14) -> list[dict]:
-        return store.usage_series(days)
+    def api_usage(days: Annotated[int, Query(ge=1, le=365)] = 14, v: Viewer = Depends(viewer)) -> list[dict]:
+        return store.usage_series(days, visible=v.visible)
 
     @app.get("/api/connect-url")
     def api_connect_url() -> dict:
@@ -463,6 +664,32 @@ def _handle_comment(settings, store, event, command) -> None:
             flow.handle_command(event, command)
     except Exception:
         logger.exception("failed to handle command on %s/%s#%s", event.owner, event.repo, event.issue_number)
+
+
+class AddRepoBody(BaseModel):
+    repo: str
+
+
+def _secure(settings: ServiceSettings) -> bool:
+    return settings.public_url.startswith("https://")
+
+
+def _redirect(location: str) -> Response:
+    return Response(status_code=303, headers={"Location": location})
+
+
+def _import_user_repos(store: ReviewStore, user: GithubUser, github_id: int) -> list[str]:
+    """Add to the user's list every repository where the App is installed
+    and they can push; marks those repositories connected too."""
+    imported = []
+    for repository, installation_id in user.installed_repositories():
+        if not can_push(repository):
+            continue
+        owner, repo = repository["owner"]["login"], repository["name"]
+        store.connect_repository(owner=owner, repo=repo, installation_id=installation_id)
+        store.add_user_repo(github_id, owner, repo)
+        imported.append(f"{owner}/{repo}")
+    return imported
 
 
 def sync_installations(settings: ServiceSettings, store: ReviewStore, *, http=None) -> dict:

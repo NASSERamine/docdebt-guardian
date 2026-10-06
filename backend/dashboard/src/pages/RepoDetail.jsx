@@ -97,7 +97,7 @@ export default function RepoDetail() {
     return (
       <>
         <p className="breadcrumb">
-          <Link to="/">Overview</Link> / {owner}/{repo}
+          <Link to="/repositories">Repositories</Link> / {owner}/{repo}
         </p>
         <p className="state-note">Nothing is known about {owner}/{repo} yet.</p>
       </>
@@ -107,7 +107,7 @@ export default function RepoDetail() {
   return (
     <>
       <p className="breadcrumb">
-        <Link to="/">Overview</Link> / {owner}/{repo}
+        <Link to="/repositories">Repositories</Link> / {owner}/{repo}
       </p>
       <StateNote error={!data && error} loading={!data && loading}>
         {data && (() => {

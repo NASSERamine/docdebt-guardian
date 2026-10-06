@@ -218,15 +218,36 @@ step — no token to create, no config file to edit on the user's side. What
 happens after (App created, keys, webhook secret) is developer-side, one-time
 setup, covered in "GitHub App service" below.
 
+**Sign in with GitHub (multi-user mode).** With `DOCDEBT_GITHUB_CLIENT_ID`
+and `DOCDEBT_GITHUB_CLIENT_SECRET` set (the App's own OAuth credentials,
+*General* page of the App, with *Callback URL* set to
+`<DOCDEBT_PUBLIC_URL>/auth/callback`), the dashboard becomes an application:
+
+* `/dashboard/` is a public home page with **Sign in with GitHub**;
+* after signing in, every repository where the App is installed and the
+  user can push is added to their list; **Repositories** adds one more by its
+  exact `owner/name` or GitHub URL: the service checks it exists, that the
+  user has write access (accepting a fix commits to it), and that the App is
+  installed, otherwise it links to GitHub's install page for that account;
+* every page and API answer is limited to the user's repositories (another
+  user's repository answers 404), and the session cookie (HttpOnly,
+  SameSite=Lax) authorizes decisions, scans and settings: no dashboard token.
+
+Without them the service stays in local mode, exactly as before: one
+operator, everything visible, changes authorized by `DOCDEBT_DASHBOARD_TOKEN`.
+
 **Pages.** The dashboard is a small single-page app (React Router), every
 page addressable by URL:
 
 | URL | Page |
 |---|---|
-| `/dashboard/` | Overview: totals, repositories, the 10 latest proposals, 14-day LLM usage |
+| `/dashboard/` | Home page: what DocDebt does, Sign in with GitHub (or Open the dashboard) |
+| `/dashboard/overview` | Overview: a two-line introduction to the project, totals, repositories, the 10 latest proposals, 14-day LLM usage |
+| `/dashboard/repositories` | Your repositories, and Add a repository by exact name or URL |
 | `/dashboard/proposals` | History: every proposal, searchable (method, file, id) and filterable by repository, status and date range, 25 per page. Filters live in the URL (`?repo=&status=&q=&since=&until=&page=`), so a filtered view can be bookmarked |
 | `/dashboard/repos/<owner>/<repo>` | One repository: connection state, counts, LLM calls, tokens, cost, 30-day usage, and its own filtered history |
 | `/dashboard/proposals/<id>` | One proposal before deciding: the debt found (each rule and message, or the quoted claim and code for semantic debt), the proposed fix as a diff and field by field, the method as it is today, then Accept / Reject |
+| `/dashboard/how-it-works` | The pipeline for a newcomer: Auditor → Judge → Repairer → Verifier → human review, each step on one running example, with what DocDebt guarantees; shows whether the Judge is on in the current settings |
 | `/dashboard/settings` | Model, repair prompt, semantic detection on/off, confidence threshold, cost cap; connected and disconnected repositories |
 
 **Settings are applied without a restart.** `.env` gives the defaults; values
