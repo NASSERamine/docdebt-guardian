@@ -1,0 +1,68 @@
+# Copy to .docdebt.yml at the root of the repository to analyse.
+# Relative paths are resolved against the directory of this file.
+
+extractor:
+  visibilities: [public, protected, package, private]
+  require_javadoc: true        # debt = existing documentation that is wrong
+  exclude: ["**/generated/**"]
+
+auditor:
+  require_throws: true         # same as the research structural check
+  hygiene_warnings: true
+
+# Few-shot calibration items (needed only for oneshot / threeshot patterns).
+# Create it with scripts/export_fewshot.py.
+# fewshot_file: fewshot_detection.json
+
+router:
+  cascade: [qwen2.5-coder:7b]  # later: [qwen2.5-coder:7b, gpt-5.6]
+  allow_cloud: false           # true to allow escalation to gpt-5.6
+  max_tokens_total: null
+  max_usd_total: null
+  skip_llm_when_structural: false
+
+judges:
+  qwen2.5-coder:7b:
+    patterns: [zeroshot]       # research best pattern for Qwen (accuracy 0.7145)
+    samples_per_pattern: 1
+    explain: true
+    require_citation: true
+    confidence_threshold: 0.0  # set from scripts/calibrate.py
+    use_context: false
+  gpt-5.6:
+    patterns: [oneshot]        # research best pattern for GPT-5.6 (accuracy 0.7816); needs fewshot_file
+    explain: true
+    require_citation: true
+
+# Override or add model specs (fields of docdebt.llm.config.ModelSpec).
+models:
+  qwen2.5-coder:7b:
+    provider: ollama
+    model: qwen2.5-coder:7b
+    num_ctx: 8192
+    base_url: http://localhost:11434
+    max_tokens: {default: 60, cot: 1200, explain: 600, repair: 1400}
+  # gpt-5.6:
+  #   provider: openai
+  #   model: gpt-5.6
+  #   api_key_env: OPENAI_API_KEY
+  #   max_tokens: {default: 500, cot: 600, explain: 1500, repair: 2500}
+  #   usd_per_1k_input: null   # fill in with the current price list
+  #   usd_per_1k_output: null
+
+repair:
+  model: qwen2.5-coder:7b      # default: the first model of router.cascade
+  pattern: zeroshot            # zeroshot | oneshot | threeshot | cot (no persona in the research)
+  max_attempts: 2              # each retry carries the reasons of the previous rejection
+  hint_findings: false         # true: list the known problems in the first prompt (off = research prompt)
+  # fewshot_file: fewshot_repair.json   # needed for oneshot / threeshot (scripts/export_repair_fewshot.py)
+  # wording_overrides:                  # required for models the research did not screen (gpt-5.6, claude)
+  #   gpt-5.6: {zeroshot: 0}
+
+context:
+  sources: [siblings]          # siblings | callees | tests | readme (or siblings_called, siblings_tests)
+
+graph:
+  checkpoint_path: null          # default: .docdebt/graph.sqlite3 next to this file (or the analysed path)
+
+workers: 1                     # >1 only if the model server handles parallel requests

@@ -1,0 +1,898 @@
+item_id,label,debt_type,mode,model,pattern,detected,plan,status,reason,attempts,changes,unresolved,repaired_doc,seconds
+12364_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException,verified,,1,add:@throws IOException,,"   /**
+    * Create the proper stream wrapper to handling the rpmIS payload section based on the
+    * payload compression header tag.
+    *
+    * @param header
+    * @param rpmIS
+    * @return
+    * @throws IOException If an error occurs while creating the compressed stream or if the compression type is not supported.
+    */",5.0
+12347_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param tc;@param type1,verified,,1,add:@param tc;add:@param type1,,"    /**
+     * Returns the default flags for a Type-2 message created in response
+     * to the given Type-1 message in the current environment.
+     *
+     * @param tc The CIFS context, which provides configuration settings.
+     * @param type1 The Type-1 message containing initial negotiation flags.
+     * @return An <code>int</code> containing the default flags.
+     */",4.48
+2365_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException;@throws NoSuchAlgorithmException,verified,,1,add:@throws NoSuchAlgorithmException;add:@throws IOException,,"	/**
+	 * Generates the rpm file to the provided file channel. This file channel must support memory mapping
+	 * and therefore should be created from a {@link RandomAccessFile}, otherwise an {@link IOException} will be
+	 * generated.
+	 *
+	 * @param original the {@link FileChannel} to which the resulting RPM will be written.
+	 * @throws NoSuchAlgorithmException if a secure hash algorithm is not available.
+	 * @throws IOException if an I/O error occurs during the file operations or signature generation.
+	 */",7.48
+12220_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param buffer;@param production;@param sourceCode,verified,,1,remove:@param buffer;add:@param sourceCode;add:@param production,,"	/**
+	 * This is the actual parser start. After running the parse, a check is
+	 * applied to check for full parsing or partial parsing. If partial parsing
+	 * is found, an exception is thrown.
+	 * 
+	 * @param sourceCode The source code to be parsed.
+	 * @param production The production rule to use for parsing.
+	 * @return
+	 * @throws ParserException
+	 */",4.73
+12343_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param publishedPaths;@param publishedResources,verified,,1,remove:@param publishedResources;add:@param publishedPaths,,"    /**
+     * Returns true if for the given set of published paths, the complete Flex cache should be cleared based on this configuration.<p>
+     *
+     * @param publishedPaths a list of published paths to check against the clearAll paths
+     * @return true if the complete Flex cache should be cleared
+     */",2.9
+12433_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param lockOptions;@param ogmContext;@param session;@return,verified,,1,add:@param session;add:@param lockOptions;add:@param ogmContext;add:@return,,"	/**
+	 * Load a list of entities from a list of tuples
+	 * TODO it sucks that we have to expose Tuple to a public API of OgmLoader
+	 *
+	 * @param session The session used for loading entities.
+	 * @param lockOptions The lock options to be applied during the load operation.
+	 * @param ogmContext The OGM loading context.
+	 * @return A list of loaded entities.
+	 */",3.23
+12527_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param buf,verified,,1,add:@param buf,,"  /**
+   * locate translation
+   *
+   * @param buf The StringBuilder to append the result to.
+   * @param parsedArgs arguments
+   * @throws SQLException if something wrong happens
+   */",4.45
+1442_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param index;@param position,verified,,1,remove:@param position;add:@param index,,"	/**
+	 * Writes the given int value (32bit, 4 bytes) to the given position in the system's native
+	 * byte order. This method offers the best speed for integer writing and should be used
+	 * unless a specific byte order is required. In most cases, it suffices to know that the
+	 * byte order in which the value is written is the same as the one in which it is read 
+	 * (such as transient storage in memory, or serialization for I/O and network), making this
+	 * method the preferable choice.
+	 * 
+	 * @param index The position at which the value will be written.
+	 * @param value The int value to be written.
+	 * 
+	 * @throws IndexOutOfBoundsException Thrown, if the index is negative, or larger then the segment
+	 *                                   size minus 4.
+	 */",7.07
+12388_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param index;@param position,verified,,1,remove:@param position;add:@param index,,"	/**
+	 * Reads an int value (32bit, 4 bytes) from the given position, in big endian byte order.
+	 * This method's speed depends on the system's native byte order, and it
+	 * is possibly slower than {@link #getInt(int)}. For most cases (such as 
+	 * transient storage in memory or serialization for I/O and network),
+	 * it suffices to know that the byte order in which the value is written is the same as the
+	 * one in which it is read, and {@link #getInt(int)} is the preferable choice.
+	 * 
+	 * @param index The position from which the value will be read.
+	 * @return The int value at the given position.
+	 * 
+	 * @throws IndexOutOfBoundsException Thrown, if the index is negative, or larger then the segment
+	 *                                   size minus 4.
+	 */",7.49
+12213_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@return;@throws PathResolutionException,verified,,1,add:@return;add:@throws PathResolutionException,,"    /**
+     * (Found at:
+     * http://stackoverflow.com/questions/204784/how-to-construct-a-relative
+     * -path-in-java-from-two-absolute-paths-or-urls)
+     * 
+     * Get the relative path from one file to another, specifying the directory
+     * separator. If one of the provided resources does not exist, it is assumed
+     * to be a file unless it ends with '/' or '\'.
+     * 
+     * @param fromPath
+     *            targetPath is calculated to this file
+     * @param toPath
+     *            basePath is calculated from this file
+     * @param pathSeparator
+     *            directory separator. The platform default is not assumed so
+     *            that we can test Unix behaviour when running on Windows (for
+     *            example)
+     * @return The relative path from {@code fromPath} to {@code toPath}.
+     * @throws PathResolutionException
+     *             If no common path element is found between {@code toPath} and {@code fromPath},
+     *             which typically indicates differing drive letters.
+     */",8.22
+12483_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param courtesyCommand;@param courtesyPollingInterval;@param courtesyWorkingDirectory;@param internal,verified,,1,add:@param internal;add:@param courtesyCommand;add:@param courtesyWorkingDirectory;add:@param courtesyPollingInterval,,"  /**
+   * Starts the worker process.
+   * @param numberOfCpus The number of worker threads to spawn.
+   * @param host The name of the host to connect to.
+   * @param username The user name to log in with.
+   * @param password The password to log in with.
+   * @param internal If true, operates internally without connecting to a database.
+   * @param courtesyCommand The command for courtesy monitoring.
+   * @param courtesyWorkingDirectory The working directory for courtesy monitoring.
+   * @param courtesyPollingInterval The polling interval for courtesy monitoring.
+   */",5.53
+12484_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param lowerVersion;@param type;@param upperVersion;@return,verified,,1,add:@param lowerVersion;add:@param upperVersion;add:@param type;add:@return,,"    /**
+     * Creates a requirement that satisfies ""x1.y1.z1 - x2.y2.z2"".
+     *
+     * @param lowerVersion The lower bound version in the format ""x1.y1.z1"".
+     * @param upperVersion The upper bound version in the format ""x2.y2.z2"".
+     * @param type         The type of Semver to use, must be NPM.
+     * @return A Requirement object representing the hyphen requirement.
+     */",5.28
+6749_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param cookieAttribute;@param cookieAttributes,verified,,1,remove:@param cookieAttribute;add:@param cookieAttributes,,"    /**
+     * Allows Cookie attributes to be set on a particular Cookie specified by the
+     * cookieName parameter.
+     *
+     * Once the Cookie has been added to the Response the removeCookieAttribute
+     * method is called for the same cookieName.
+     *
+     * Currently the only Cookie attribute that is supported by the runtime here
+     * is the SameSite Cookie attribute.  All other existing Cookie attributes must 
+     * be added via the Cookie API.  Using this API to add anything but SameSite attribute
+     * will be ignored.
+     *
+     * The cookieAttribute should be in the form: attributeName=attributeValue.
+     *
+     * @param cookieName - The Cookie name to add the attribute to.
+     * @param cookieAttributes - The attributes to be added to the Cookie, formatted as attributeName=attributeValue. Currently, only SameSite=Lax|None|Strict is supported.
+     */",8.08
+12295_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+11262_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param appContext,verified,,1,add:@param appContext,,"    /**
+     *  This is one of two possible entry points for interacting with the library. This method creates a new Client object
+     *  which represents your app's connection to the cloud infrastructure.  This method does NOT automatically call the
+     *  client.connect() method after the client is created, so your app will need to call it when it is ready to
+     *  connect.
+     *
+     * @param appContext The application context for the client.
+     *  @return A Respoke Client instance
+     */",4.36
+1317_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+12477_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param convenienceSetterProvider;@param dataTypeProvider;@param explicitAttributeDecider;@param nameProvider,verified,,1,add:@param dataTypeProvider;add:@param nameProvider;add:@param explicitAttributeDecider;add:@param convenienceSetterProvider,,"    /**
+     * Creates a new table extractor with the specified class prefix and the specified target package.
+     *
+     * @param classPrefix   The prefix to put before class names. Only a-zA-Z, starting with a capital letter
+     * @param targetPackage The target package. Usage of default package is forbidden.
+     * @param dataTypeProvider The provider for data types.
+     * @param nameProvider The provider for names.
+     * @param explicitAttributeDecider The decider for explicit attributes.
+     * @param convenienceSetterProvider The provider for convenience setters.
+     */",5.01
+12549_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param gvrActivity,verified,,1,remove:@param gvrActivity,,"    /**
+     * Shows a {@link TextView} on a {@linkplain GVRSceneObject scene object}
+     * with view's default height and width.
+     * 
+     * @param gvrContext
+     *            current {@link GVRContext}
+     * @param width
+     *            Scene object height, in GVRF scene graph units.
+     * 
+     * @param height
+     *            Scene object's width, in GVRF scene graph units.
+     * @param text
+     *            {@link CharSequence} to show on the textView
+     */",4.2
+1443_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param index;@param position,verified,,1,remove:@param position;add:@param index,,"	/**
+	 * Writes the given int value (32bit, 4 bytes) to the given position in little endian
+	 * byte order. This method's speed depends on the system's native byte order, and it
+	 * is possibly slower than {@link #putInt(int, int)}. For most cases (such as 
+	 * transient storage in memory or serialization for I/O and network),
+	 * it suffices to know that the byte order in which the value is written is the same as the
+	 * one in which it is read, and {@link #putInt(int, int)} is the preferable choice.
+	 * 
+	 * @param index The position at which the value will be written.
+	 * @param value The int value to be written.
+	 * 
+	 * @throws IndexOutOfBoundsException Thrown, if the index is negative, or larger then the segment
+	 *                                   size minus 4.
+	 */",7.85
+3783_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param mediaManagerName;@return,verified,,1,add:@param mediaManagerName;add:@return,,"    /**
+     * The jingle session may have one or more media managers that are trying to establish media sessions.
+     * When the media manager succeeds in creating a media session is registers it with the session by the
+     * media manager's static name. This routine is where other objects can access the registered media sessions.
+     * NB: If the media manager has not succeeded in establishing a media session then this could return null.
+     *
+     * @param mediaManagerName The name of the media manager whose media session is to be retrieved.
+     * @return The media session if it exists; otherwise, null.
+     */",2.65
+12447_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param jmxId;@param pool,verified,,1,remove:@param pool;add:@param jmxId,,"    /**
+     * Construction of a new aggregate stats object
+     * 
+     * @param jmxId The JMX ID for this client socket stats object.
+     */",2.01
+3156_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws HiveException,verified,,2,add:@throws HiveException,,"/**
+* This method evaluates a given Object (of type BitcoinTransaction) or a struct which has all necessary fields corresponding to a BitcoinTransaction. The first case occurs, if the UDF evaluates data represented in a table provided by the HiveSerde as part of the hadoocryptoledger library. The second case occurs, if BitcoinTransaction data has been imported in a table in another format, such as ORC or Parquet.
+* 
+* @param arguments array of length 1 containing one object of type BitcoinTransaction or a Struct representing a BitcoinTransaction
+*
+* @return BytesWritable containing a byte array with the double hash of the BitcoinTransaction
+*
+* @throws HiveException if an error occurs during evaluation
+*/",13.84
+12307_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+12291_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param proxy;@param proxyPort;@param proxyUrl,verified,,1,remove:@param proxyPort;remove:@param proxyUrl;add:@param proxy,,"    /**
+     * Sets the proxy that will be used by <b>ALL</b> JDA instances.<br>
+     * Once this is set <b>IT CANNOT BE CHANGED.</b><br>
+     * After a JDA instance as been created, this method can never be called again, even if you are creating a new JDA object.<br>
+     * <b>Note:</b> currently this only supports HTTP proxies.
+     *
+     * @param proxy
+     *          The {@link HttpHost} representing the proxy to be used.
+     * @return
+     *      Returns the {@link net.dv8tion.jda.core.JDABuilder JDABuilder} instance. Useful for chaining.
+     * @throws UnsupportedOperationException
+     *          If this method is called after proxy settings have already been set or after at least 1 JDA object has been created.
+     */",7.68
+12542_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param dirmode;@throws IOException;@throws NoSuchAlgorithmException,verified,,1,add:@param dirmode;add:@throws NoSuchAlgorithmException;add:@throws IOException,,"	/**
+	 * Add the specified file to the repository payload in order.
+	 * The required header entries will automatically be generated
+	 * to record the directory names and file names, as well as their
+	 * digests.
+	 *
+	 * @param path the absolute path at which this file will be installed.
+	 * @param source the file content to include in this rpm.
+	 * @param mode the mode of the target file in standard three octet notation
+	 * @param dirmode the mode of the directory containing the file in standard three octet notation.
+	 * @throws NoSuchAlgorithmException if an error occurs during the calculation of the digest.
+	 * @throws IOException if an I/O error occurs while reading the source file.
+	 */",6.56
+12284_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param index;@param position,verified,,1,remove:@param position;add:@param index,,"	/**
+	 * Writes the given long value (64bit, 8 bytes) to the given position in big endian
+	 * byte order. This method's speed depends on the system's native byte order, and it
+	 * is possibly slower than {@link #putLong(int, long)}. For most cases (such as 
+	 * transient storage in memory or serialization for I/O and network),
+	 * it suffices to know that the byte order in which the value is written is the same as the
+	 * one in which it is read, and {@link #putLong(int, long)} is the preferable choice.
+	 * 
+	 * @param index The position at which the value will be written.
+	 * @param value The long value to be written.
+	 * 
+	 * @throws IndexOutOfBoundsException Thrown, if the index is negative, or larger then the segment
+	 *                                   size minus 8.
+	 */",7.68
+10225_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param parameters,verified,,1,add:@param parameters,,"    /**
+     * Get row attachment.
+     *
+     * It mirrors to the following Smartsheet REST API method: GET /sheets/{sheetId}/rows/{rowId}/attachments
+     *
+     * Returns: the resource (note that if there is no such resource, this method will throw ResourceNotFoundException
+     * rather than returning null).
+     *
+     * Exceptions:
+     *   InvalidRequestException : if there is any problem with the REST API request
+     *   AuthorizationException : if there is any problem with the REST API authorization(access token)
+     *   ResourceNotFoundException : if the resource can not be found
+     *   ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting)
+     *   SmartsheetRestException : if there is any other REST API related error occurred during the operation
+     *   SmartsheetException : if there is any other error occurred during the operation
+     *
+     * @param sheetId the sheet id
+     * @param rowId the row id
+     * @param parameters pagination parameters
+     * @return the resource (note that if there is no such resource, this method will throw ResourceNotFoundException
+     * rather than returning null).
+     * @throws SmartsheetException the smartsheet exception
+     */",4.5
+7800_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param model,verified,,1,add:@param model,,"	/**
+	 * Returns the derivative of the swap rate (associated with this swap) with respect to the forward rates  dS/dL_{i}.
+	 *
+	 * @param liborPeriodDiscretization Forward rate discretization.
+	 * @param model The analytic model used for calculations.
+	 * @param discountCurve The discount curve.
+	 * @param forwardCurve The forward curve.
+	 * @return A map containing the derivative of the swap rate with respect to the forward rates  dS/dL_{i} under the key ""values"".
+	 */",6.3
+1068_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param n,verified,,1,add:@param n,,"    /**
+     * Trims textual content of this node, removes empty text and
+     * CDATA children, recurses into its child nodes.
+     * @param n       the node whose textual content is to be trimmed and processed
+     * @param normalize whether to normalize whitespace as well
+     */",3.01
+8588_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param locks;@param locksKVs,verified,,1,remove:@param locks;add:@param locksKVs,,"  /**
+   * Attempts to roll forward or roll back a set of locks encountered by a transaction reading data.
+   *
+   * @param env environment
+   * @param startTs The logical start time from the oracle of the transaction that encountered the
+   *        lock
+   * @param stats Stats object for the transaction that encountered the lock
+   * @param locksKVs List of key-value pairs representing the locks.
+   * @param startTime The wall time that the transaction that encountered the lock first saw the
+   *        lock
+   * @return true if all locks passed in were resolved (rolled forward or back)
+   */",5.44
+11364_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException,verified,,1,add:@throws IOException,,"    /**
+     * Add a Weather Station to the dataset.
+     * <p>
+     * Add a new Weather Station from a {@code byte[]} consisting of the JSON
+     * for that weather station data.
+     *
+     * @param source JSON weather station data
+     * @throws IOException if an I/O error occurs while processing the source data
+     */",3.32
+11368_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@return;@throws IOException,verified,,2,add:@return;add:@throws IOException,,"    /**
+     * Fix Experiment to Soil Profile/Weather Station mapping after updates.
+     * <p>
+     * <strong>NOTE:</strong> This must be called after updating values which
+     * will affect the hash.
+     * <p>
+     * <strong>NOTE:</strong> This method is called prior to generating a JSON
+     * using any method found in {@link org.agmip.ace.io.AceGenerator}.
+     * <p>
+     * Re-associates and regenerates all ID's based on the hash for each
+     * container.
+     *
+     * @return The current instance of AceDataset after fixing associations.
+     * @throws IOException If an I/O error occurs during the process.
+     */",11.51
+4403_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param evalTaskOption;@param variedParamNameOption,verified,,1,remove:@param evalTaskOption;remove:@param variedParamNameOption,,"	/**
+	 * Refresh the provided choices of an EditableMultiChoiceOption every time
+	 * a ClassOption (the prequential evaluation task) is changed. This method 
+	 * checks if the chosen task actually changed, before updating the 
+	 * MultiChoiceOption.
+	 * <br>
+	 * The method looks for available options in the learner option of the
+	 * prequential evaluation task and recursively in all of its ClassOptions.
+	 * <br>
+	 * Only Int and Float options are shown in the MultiChoiceOption, because 
+	 * only numeric parameters should be variable.
+	 * <br>
+	 * If one of the options is named ""budget"" or its name contains the word 
+	 * ""budget"", it is selected as the default option.
+	 * 
+	 */",7.02
+6812_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param arguments;@param instance;@param methodName;@param object;@param propertyName,verified,,1,remove:@param arguments;remove:@param methodName;remove:@param object;add:@param instance;add:@param propertyName,,"    /**
+     * Invoke a missing method on the given object with the given arguments.
+     *
+     * @param instance The object the property should be invoked on.
+     * @param propertyName The name of the property to invoke.
+     * @param optionalValue
+     * @param isGetter Wether the method is a getter
+     *
+     * @return The result of the method invocation.
+     */",5.64
+12463_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param blendFunc,verified,,1,add:@param blendFunc,,"	/**
+	 * Enables usage of diffuse algorithm and sets specified blending mode
+	 * 
+	 * <p>If set to true lights are blended using the diffuse shader. This is
+	 * more realistic model than normally used as it preserve colors but might
+	 * look bit darker and also it might improve performance slightly.
+	 *
+	 * @param blendFunc The blending function to be used for diffuse lighting.
+	 */",1.76
+8649_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+4773_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param show;@param showdebugoutput,verified,,1,remove:@param showdebugoutput;add:@param show,,"/**
+	 * for backward compatibility reason this setting only works enables debugging, if there is a custom
+	 * debug template and at least one debug setting is enabled
+	 *
+	 * @param show The value to set for showing debug output.
+	 */",2.53
+12470_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param ogmLoadingContext;@param qp;@param returnProxies;@param session;@return,verified,,1,add:@param session;add:@param qp;add:@param ogmLoadingContext;add:@param returnProxies;add:@return,,"	/**
+	 * Execute the physical query and initialize the various entities and collections
+	 *
+	 * @param session The Hibernate session implementor.
+	 * @param qp The query parameters containing necessary information for the query execution.
+	 * @param ogmLoadingContext The context used for loading OGM (Object-Graph Mapping) data.
+	 * @param returnProxies Indicates whether to return proxies or not.
+	 * @return A list of hydrated objects resulting from the query execution.
+	 */",4.77
+10231_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param parameters,verified,,1,add:@param parameters,,"	/**
+	 * List folders of a given workspace.
+	 * 
+	 * It mirrors to the following Smartsheet REST API method: GET /workspace/{id}/folders
+	 * 
+	 * Exceptions: 
+	 *   - InvalidRequestException : if there is any problem with the REST API request 
+	 *   - AuthorizationException : if there is any problem with the REST API authorization(access token) 
+	 *   - ResourceNotFoundException : if the resource can not be found 
+	 *   - ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting) 
+	 *   - SmartsheetRestException : if there is any other REST API related error occurred during the operation 
+	 *   - SmartsheetException : if there is any other error occurred during the operation
+	 *
+	 * @param workspaceId the ID of the workspace
+	 * @param parameters pagination parameters for the request
+	 * @return the folders (note that empty list will be returned if there is none)
+	 * @throws SmartsheetException the smartsheet exception
+	 */",4.28
+3097_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param namingScheme,verified,,1,add:@param namingScheme,,"    /**
+     * Changes the naming scheme used to generate names for mock objects that 
+     * have not been explicitly named in the test.
+     * 
+     * The default naming scheme names mock objects by lower-casing the first
+     * letter of the class name, so a mock object of type BananaSplit will be
+     * called ""bananaSplit"" if it is not explicitly named in the test.
+     *
+     * @param namingScheme The new naming scheme to be used.
+     */",2.16
+5664_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws SnowflakeSQLException,verified,,1,add:@throws SnowflakeSQLException,,"  /**
+   * Parse the put/get command.
+   * <p>
+   * We send the command to the GS to do the parsing. In the future, we
+   * will delegate more work to GS such as copying files from HTTP to the remote store.
+   *
+   * @throws SnowflakeSQLException if there is an error parsing the command or processing the locations due to invalid input.
+   * @throws SQLException failure to parse the PUT/GET command
+   */",4.97
+3371_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param spec;@return,verified,,1,add:@param spec;add:@return,,"  /**
+   * Returns the union member class name for the given {@link ClassTemplateSpec} as a Swift
+   * source code string.
+   *
+   * @param spec The {@link ClassTemplateSpec} object containing the schema information.
+   * @return A string representing the union member class name based on the schema type.
+   */",2.66
+7850_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param context;@param session,verified,,1,remove:@param session;add:@param context,,"	/**
+	 * load and run the OnNewStatePlugins. OnNewStatePlugins are plugins that are ran when a new
+	 * state was found. This also happens for the Index State. Warning the session is not a clone,
+	 * chaning the session can cause strange behaviour of Crawljax.
+	 * <p>
+	 * This method can be called from multiple threads with different {@link CrawlerContext}
+	 * </p>
+	 * 
+	 * @param context
+	 *            The current crawler context.
+	 * @param newState
+	 *            The new state
+	 */",5.13
+3299_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param type,verified,,1,add:@param type,,"    /**
+     * Builds the backbone object from the computed backbone literals.
+     * @param variables relevant variables
+     * @param type      The type of backbone to build, which determines how variables are categorized.
+     * @return backbone
+     */",3.72
+5399_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param cacheEntryClass;@param cacheEntryFactory,verified,,1,remove:@param cacheEntryClass;add:@param cacheEntryFactory,,"    /**
+     * Gets a value from cache. If the key doesn't exist, it will create the value using the updater callback
+     * Prevents cache storms with a lock 
+     * 
+     * The key is always added to the cache. Null return values will also be cached.
+     * You can use this together with ConcurrentLinkedHashMap to create a bounded LRU cache
+     *
+     * @param map the cache map
+     * @param key the key to look up
+     * @param timeoutMillis cache entry timeout
+     * @param updater callback to create/update value
+     * @param cacheEntryFactory factory to create CacheEntry instances
+     * @param returnExpiredWhileUpdating when true, return expired value while updating new value
+     * @param cacheRequestObject context object that gets passed to hasExpired, shouldUpdate and updateValue methods, not used in default implementation
+     * @return
+     */",10.14
+10229_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param includes,verified,,1,add:@param includes,,"	/**
+	 * Get a folder.
+	 * 
+	 * It mirrors to the following Smartsheet REST API method: GET /folder/{id}
+	 * 
+	 * Exceptions:
+	 *   InvalidRequestException : if there is any problem with the REST API request
+	 *   AuthorizationException : if there is any problem with the REST API authorization(access token)
+	 *   ResourceNotFoundException : if the resource can not be found
+	 *   ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting)
+	 *   SmartsheetRestException : if there is any other REST API related error occurred during the operation
+	 *   SmartsheetException : if there is any other error occurred during the operation
+	 *
+	 * @param folderId the folder id
+	 * @param includes enum set of source inclusion options
+	 * @return the folder (note that if there is no such resource, this method will throw ResourceNotFoundException
+	 * rather than returning null)
+	 * @throws SmartsheetException the smartsheet exception
+	 */",8.96
+10214_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException,verified,,2,add:@throws IOException,,"    /**
+     * Create discussion on a row.
+     *
+     * It mirrors to the following Smartsheet REST API method: /sheets/{sheetId}/rows/{rowId}/discussions
+     *
+     * Exceptions:
+     *   IllegalArgumentException : if any argument is null
+     *   InvalidRequestException : if there is any problem with the REST API request
+     *   AuthorizationException : if there is any problem with the REST API authorization(access token)
+     *   ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting)
+     *   SmartsheetRestException : if there is any other REST API related error occurred during the operation
+     *   SmartsheetException : if there is any other error occurred during the operation
+     *
+     * @param sheetId the sheet ID
+     * @param rowId the row ID
+     * @param discussion the comment to add, limited to the following required attributes: text
+     * @param file the file to be attached
+     * @param contentType the type of file
+     * @return the created discussion
+     * @throws SmartsheetException the smartsheet exception
+     * @throws IOException if an I/O error occurs while reading the file
+     */",21.33
+12351_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param attributeName,verified,,1,remove:@param attributeName,,"        /**
+         * Reads the types from the given content definition and adds the to the map of already registered
+         * types if necessary.<p>
+         * 
+         * @param xmlContentDefinition the XML content definition
+         * @param path the element path
+         */",2.37
+12506_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param driverDetails;@param shouldWeCheckFileHash;@throws IOException;@throws URISyntaxException,verified,,1,add:@param driverDetails;add:@param shouldWeCheckFileHash;add:@throws IOException;add:@throws URISyntaxException,,"    /**
+     * Perform the file download
+     *
+     * @param driverDetails The details of the driver, including the file location and hash information.
+     * @param shouldWeCheckFileHash Indicates whether to check the file hash after downloading.
+     * @return File
+     * @throws MojoExecutionException
+     * @throws IOException If an I/O error occurs.
+     * @throws URISyntaxException If the remote file location is not a valid URI.
+     */",5.03
+4051_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param dnssecMode,verified,,1,add:@param dnssecMode,,"    /**
+     * Returns a list of HostAddresses under which the specified XMPP server can be reached at for client-to-server
+     * communication. A DNS lookup for a SRV record in the form ""_xmpp-client._tcp.example.com"" is attempted, according
+     * to section 3.2.1 of RFC 6120. If that lookup fails, it's assumed that the XMPP server lives at the host resolved
+     * by a DNS lookup at the specified domain on the default port of 5222.
+     * <p>
+     * As an example, a lookup for ""example.com"" may return ""im.example.com:5269"".
+     * </p>
+     *
+     * @param domain the domain.
+     * @param failedAddresses on optional list that will be populated with host addresses that failed to resolve.
+     * @param dnssecMode the DNSSEC mode to use during the resolution process.
+     * @return List of HostAddress, which encompasses the hostname and port that the
+     *      XMPP server can be reached at for the specified domain.
+     */",9.44
+12362_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param iDBType;@param iDatabaseType,verified,,1,remove:@param iDBType;add:@param iDatabaseType,,"    /**
+     * Instantiate a new Database object.<br />
+     * Warning - Remember to call the init(name) method on the returned database object.
+     * @param iDatabaseType The type of the database to instantiate.
+     * @return The database.
+     */",3.01
+5206_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param arity;@return,verified,,1,add:@param arity;add:@return,,"/**
+         * Leniently parses the specified String as an {@code Arity} value and return the result. An arity string can
+         * be a fixed integer value or a range of the form {@code MIN_VALUE + "".."" + MAX_VALUE}. If the
+         * {@code MIN_VALUE} string is not numeric, the minimum is zero. If the {@code MAX_VALUE} is not numeric, the
+         * arity is taken to be variable and the maximum is {@code Integer.MAX_VALUE}.
+         *
+         * @param arity the string representation of the arity
+         * @return an {@code Arity} object representing the parsed value
+         */",5.62
+12502_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param endPoint;@param startPoint,verified,,1,add:@param startPoint;add:@param endPoint,,"	/**
+	 * Add numberOfPoints points to the path to create a great circle from startPoint to endPoint.
+	 *
+	 * @param startPoint The starting point of the great circle.
+	 * @param endPoint   The ending point of the great circle.
+	 */",2.23
+10905_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param metric;@param value,verified,,1,remove:@param value;add:@param metric,,"/**
+     * Evaluates if the passed in value falls inside the range. The negation is
+     * ignored.
+     *
+     * @param metric
+     *            The metric containing the value to evaluate.
+     * @param prefix
+     *            Used to multiply the range boundaries.
+     *
+     * @return <code>true</code> if the value falls inside the range. The
+     *         negation ('^') is ignored.
+     */",4.05
+4959_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param target,verified,,1,add:@param target,,"	/**
+	 * Get RAW image ByteBuffer. It will always return buffer with 3 x 1 bytes
+	 * per each pixel, where RGB components are on (0, 1, 2) and color space is
+	 * sRGB.<br>
+	 * <br>
+	 * 
+	 * <b>IMPORTANT!</b><br>
+	 * Some drivers can return direct ByteBuffer, so there is no guarantee that
+	 * underlying bytes will not be released in next read image operation.
+	 * Therefore, to avoid potential bugs you should convert this ByteBuffer to
+	 * bytes array before you fetch next image.
+	 * 
+	 * @param target ByteBuffer to store the image data. Must not be null.
+	 * @return Byte buffer
+	 */",5.97
+12361_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param rebalancePartitionPlanList;@param rebalanceTaskPlanList,verified,,1,remove:@param rebalancePartitionPlanList;add:@param rebalanceTaskPlanList,,"    /**
+     * Given a list of partition infos, generates a map of stealer / donor node
+     * to list of partition infos
+     * 
+     * @param rebalanceTaskPlanList The complete list of rebalance task plans.
+     * @param groupByStealerNode Boolean indicating if we want to group by
+     *        stealer node ( or donor node )
+     * @return Flattens it into a map on a per node basis
+     */",4.5
+12287_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param factor,verified,,1,add:@param factor,,"    /**
+     * Scale this interval by an integer factor.  The server
+     * can scale by arbitrary factors, but that would require
+     * adjusting the call signatures for all the existing methods
+     * like getDays() or providing our own justification of fractional
+     * intervals.  Neither of these seem like a good idea without a
+     * strong use case.
+     *
+     * @param factor The integer factor by which to scale the interval.
+     */",1.67
+7746_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param calibrationTargetValues;@param calibrationWeights,verified,,1,remove:@param calibrationTargetValues;remove:@param calibrationWeights,,"	/**
+	 * Performs a generic calibration of the parametric model by trying to match a given vector of calibration product to a given vector of target values
+	 * using a given vector of weights.
+	 *
+	 * Optional calibration parameters may be passed using the map calibrationParameters. The keys are (<code>String</code>s):
+	 * <ul>
+	 * 	<li><tt>brownianMotion</tt>: Under this key an object implementing {@link net.finmath.montecarlo.BrownianMotion} may be provided. If so, this Brownian motion is used to build the valuation model.</li>
+	 * 	<li><tt>maxIterations</tt>: Under this key an object of type Integer may be provided specifying the maximum number of iterations.</li>
+	 * 	<li><tt>accuracy</tt>: Under this key an object of type Double may be provided specifying the desired accuracy. Note that this is understood in the sense that the solver will stop if the iteration does not improve by more than this number.</li>
+	 * </ul>
+	 *
+	 * @param calibrationModel The LIBOR market model to be used for calibrations (specifies forward curve and tenor discretization).
+	 * @param calibrationProducts The array of calibration products.
+	 * @param calibrationParameters A map of type Map&lt;String, Object&gt; specifying some (optional) calibration parameters.
+	 * @return A new parametric model of the same type than <code>this</code> one, but with calibrated parameters.
+	 * @throws CalculationException Thrown if calibration has failed.
+	 */",25.32
+12341_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param listener,verified,,1,add:@param listener,,"    /**
+     * Writes the body of this request to an HttpURLConnection.
+     *
+     * <p>Subclasses overriding this method must remember to close the connection's OutputStream after writing.</p>
+     *
+     * @param connection the connection to which the body should be written.
+     * @param listener   a progress listener that will be notified of write progress, or null if no progress tracking is needed.
+     * @throws BoxAPIException if an error occurs while writing to the connection.
+     */",4.43
+12301_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param A;@param b;@param matrix;@param vector,verified,,1,remove:@param A;remove:@param b;add:@param matrix;add:@param vector,,"	/**
+	 * Find a solution of the linear equation A x = b in the least square sense where
+	 * <ul>
+	 * <li>A is an n x m - matrix given as double[n][m]</li>
+	 * <li>b is an m - vector given as double[m],</li>
+	 * <li>x is an n - vector given as double[n],</li>
+	 * </ul>
+	 * 
+	 * @param matrix The matrix (left hand side of the linear equation).
+	 * @param vector The vector (right hand side of the linear equation).
+	 * @return A solution x to A x = b.
+	 */",5.08
+12519_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param thatChunk,verified,,1,add:@param thatChunk,,"    /**
+     * Performs length difference.
+     *
+     * @param thisChunk the first chunk to be compared
+     * @param thatChunk the second string for comparison
+     * @return the difference in length (l1 - l2)
+     */",2.63
+11390_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException,verified,,2,add:@throws IOException,,"	/**
+	 * Update a key-value entry in a component.
+	 * <p>
+	 * Update a key-value pair in this component, base on the following
+	 * conditions:
+	 * <p>
+	 * <ul>
+	 * <li> {@code removeMode} overrides all other arguments.
+	 * <li> if {@code key} does not belong in this component,
+	 * it will not be added, unless {@code skipTypeCheck} is {@code true}</li>
+	 * </ul>
+	 * <p>
+	 * This method can be chained.
+	 *
+	 * @param key key for the JSON value in this component.
+	 * @param newValue new value for the {@code key} in this component.
+	 * @param addIfMissing if {@code true} add this value to the component.
+	 * @param skipTypeCheck if {@code true} skip the type checking for insertion.
+	 * @param removeMode if {@code true} remove this value from the component.
+	 * @return {@code this} component after being updated.
+	 * @throws IOException If an I/O error occurs during the update process.
+	 */",18.43
+1629_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param type;@param version;@return,verified,,1,add:@param version;add:@param type;add:@return,,"    /**
+     * Allows patch-level changes if a minor version is specified on the comparator. Allows minor-level changes if not.
+     *
+     * @param version The version string to be processed.
+     * @param type    The type of semver (NPM or COCOAPODS).
+     * @return A Requirement object representing the tilde requirement.
+     */",4.13
+12521_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param argument;@param arguments,verified,,1,remove:@param arguments;add:@param argument,,"	/**
+	 * Invokes the given method with the given arguments and returns
+	 * immediately. The {@code extraHeaders} are added to the request. The
+	 * {@code Future<T>} object that is returned can be used to retrieve the
+	 * result.
+	 * 
+	 * @param methodName
+	 *            the name of the method to invoke
+	 * @param argument   the argument to the method
+	 * @param returnType
+	 *            the return type
+	 * @param extraHeaders
+	 *            extra headers to add to the request
+	 * @return the response {@code Future<T>}
+	 */",4.67
+12334_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param findAllUsers,verified,,1,add:@param findAllUsers,,"    /**
+     * Builds a SPARQL query to retrieve details of a RestletUtilUser. This method could be
+     * overridden to search for other information regarding a user.
+     * 
+     * @param userIdentifier
+     *            The unique identifier of the User to search for.
+     * @param findAllUsers   A boolean indicating whether to find all users or just one specific user.
+     * @return A String representation of the SPARQL Select query
+     */",4.34
+5981_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param conn;@throws SQLException,verified,,1,add:@param conn;add:@throws SQLException,,"    /**
+     * Constructs the LargeObject API.
+     *
+     * <p><b>Important Notice</b>
+     * <br>This method should only be called by org.postgresql.Connection
+     *
+     * <p>There should only be one LargeObjectManager per Connection. The
+     * org.postgresql.Connection class keeps track of the various extension API's
+     * and it's advised you use those to gain access, and not going direct.
+     *
+     * @param conn the database connection to manage large objects with
+     * @throws SQLException if an error occurs during initialization
+     */",2.43
+12482_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param currentIndex,verified,,1,remove:@param currentIndex,,"    /**
+     * Simple info message for status
+     * 
+     * @param tag Message to print out at start of info message
+     */",1.89
+12418_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param httpRequest;@param httpResponse;@throws IOException,verified,,1,add:@param httpRequest;add:@param httpResponse;add:@throws IOException,,"    /**
+     * @param httpRequest  the HTTP request containing the data to be consumed
+     * @param httpResponse the HTTP response to send any necessary responses
+     * @return true if consumed, false otherwise.
+     * @throws IOException if an I/O error occurs during consumption
+     */",3.37
+10736_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param txNum,verified,,1,remove:@param txNum,,"	/**
+	 * Pins a buffer to a new block in the specified file, potentially waiting
+	 * until a buffer becomes available. If no buffer becomes available within a
+	 * fixed time period, then repins all currently holding blocks.
+	 * 
+	 * @param fileName
+	 *            the name of the file
+	 * @param fmtr
+	 *            the formatter used to initialize the page
+	 * @return the buffer pinned to that block
+	 */",3.89
+5732_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws BoxException,verified,,1,add:@throws BoxException,,"    /**
+     * Returns a string representation of this response's body. This method is used when logging this response's body.
+     * By default, it returns an empty string (to avoid accidentally logging binary data) unless the response contained
+     * an error message.
+     * @return a string representation of this response's body.
+     * @throws BoxException if an I/O error occurs while reading the stream.
+     */",3.75
+12501_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param contents;@param mi;@param sid,verified,,1,add:@param contents;add:@param mi;add:@param sid,,"    /**
+     * A constructor where the main components can be initialized.
+     *
+     * @param contents  the list of JingleContent objects to initialize the contents field, may be null
+     * @param mi        the JingleContentInfo object to initialize the contentInfo field
+     * @param sid       the string to initialize the sid field
+     */",3.27
+12553_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param closeOS;@param os;@param out,verified,,1,remove:@param out;add:@param os;add:@param closeOS,,"	/**
+	 * copy an input resource to an output resource
+	 * 
+	 * @param in
+	 * @param os The output stream where the data will be written.
+	 * @param closeOS Whether to close the output stream after copying is complete.
+	 * @throws IOException
+	 */",3.32
+10227_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param parameters;@param sheetId,verified,,1,add:@param sheetId;add:@param parameters,,"    /**
+     * Get the cell modification history.
+     *
+     * It mirrors to the following Smartsheet REST API method: GET /sheets/{sheetId}/rows/{rowId}/columns/{columnId}/history
+     *
+     * Exceptions:
+     *   InvalidRequestException : if there is any problem with the REST API request
+     *   AuthorizationException : if there is any problem with the REST API authorization(access token)
+     *   ResourceNotFoundException : if the resource can not be found
+     *   ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting)
+     *   SmartsheetRestException : if there is any other REST API related error occurred during the operation
+     *   SmartsheetException : if there is any other error occurred during the operation
+     *
+     * @param sheetId the ID of the sheet containing the cell
+     * @param rowId the row id
+     * @param columnId the column id
+     * @param parameters pagination and filtering parameters
+     * @return the modification history (note that if there is no such resource, this method will throw
+     * ResourceNotFoundException rather than returning null).
+     * @throws SmartsheetException the smartsheet exception
+     */",10.3
+12339_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param endTime;@param startTime;@return,verified,,1,add:@param startTime;add:@param endTime;add:@return,,"    /**
+     * TimeMatch determines whether the current time is between startTime and endTime.
+     * You can use ""_"" to indicate that the parameter is ignored
+     *
+     * @param startTime The start time in ""yyyy-MM-dd HH:mm:ss"" format, or ""_"" to ignore.
+     * @param endTime The end time in ""yyyy-MM-dd HH:mm:ss"" format, or ""_"" to ignore.
+     * @return true if the current time is between startTime and endTime (inclusive), false otherwise.
+     */",4.0
+5076_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+12474_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param os;@param version;@throws IOException,verified,,1,add:@param os;add:@param version;add:@throws IOException,,"  /**
+   * Writes FSA magic and version.
+   *
+   * @param os     the output stream to which the data is written
+   * @param version the version byte to be written
+   * @throws IOException if an I/O error occurs
+   */",2.77
+147_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param changeListener;@param inputType;@param maxLength;@return,verified,,1,add:@param maxLength;add:@param inputType;add:@param changeListener;add:@return,,"	/**
+	 * Frontends may or may not provide special Inputs. Even a single Frontend
+	 * can sometimes support those Inputs and sometimes not. For example a HTML
+	 * Frontend depends on the used Browser. Firefox and Microsoft didn't
+	 * support date and time Inputs for a long time. Also the used device or the
+	 * user preferences can influence whether the returned Optional is empty or
+	 * contains an Input.
+	 *
+	 * @param maxLength    the maximum length of the input
+	 * @param inputType    the type of the input
+	 * @param changeListener the listener to be notified when the input changes
+	 * @return an Optional containing the created Input if available; otherwise, an empty Optional
+	 */",3.6
+5800_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param c;@param canvas,verified,,2,remove:@param canvas;add:@param c,,"	/**
+	 * Draw a marker on each of our items. populate() must have been called first.<br/>
+	 * <br/>
+	 * The marker will be drawn twice for each Item in the Overlay--once in the shadow phase, skewed
+	 * and darkened, then again in the non-shadow phase. The bottom-center of the marker will be
+	 * aligned with the geographical coordinates of the Item.<br/>
+	 * <br/>
+	 * The order of drawing may be changed by overriding the getIndexToDraw(int) method. An item may
+	 * provide an alternate marker via its OverlayItem.getMarker(int) method. If that method returns
+	 * null, the default marker is used.<br/>
+	 * <br/>
+	 * The focused item is always drawn last, which puts it visually on top of the other items.<br/>
+	 *
+	 * @param c
+	 *            the Canvas upon which to draw. Note that this may already have a transformation
+	 *            applied, so be sure to leave it the way you found it.
+	 * @param mapView
+	 *            the MapView that requested the draw. Use MapView.getProjection() to convert
+	 *            between on-screen pixels and latitude/longitude pairs
+	 * @param shadow
+	 *            if true, draw the shadow layer. If false, draw the overlay contents.
+	 */",20.63
+12215_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param form,verified,,1,add:@param form,,"    /**
+     * Attempts to redirect the user's browser can be redirected to the URI provided in a query
+     * parameter named by {@link #getRedirectQueryName()}.
+     * 
+     * Uses a configured fixed redirect URI or a default redirect URI if they are not setup.
+     * 
+     * @param request
+     *            The current request.
+     * @param response
+     *            The current response.
+     * @param form The form containing additional parameters (optional).
+     */",4.32
+5731_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws BoxException,verified,,1,add:@throws BoxException,,"    /**
+     * Disconnects this response from the server and frees up any network resources. The body of this response can no
+     * longer be read after it has been disconnected.
+     *
+     * @throws BoxException if an error occurs while closing the connection to the Box API due to a network error or
+     *                      because the stream was already closed.
+     */",3.47
+11367_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@throws IOException,verified,,2,add:@throws IOException,,"    /**
+     * Link all Experiments to the assocaited Soil Profile and Weather Station.
+     * <p>
+     * <strong>NOTE:</strong>This must be called prior to calling
+     * {@link AceExperiment#getWeather} or {@link AceExperiment#getSoil} or
+     * a {@code NullPointerException} will be thrown.
+     * <p>
+     * Loops through all the experiments to link the Soil Profile and Weather
+     * station to each experiment. It first attempts to bind to the {@code wid}
+     * or {@code sid} of the experiment, falling back on the {@code wst_id}
+     * or {@code soil_id}. If no association is found,
+     * {@link AceFunctions#getBlankComponent} is called.
+     *
+     * @throws IOException if an I/O error occurs while processing the experiments
+     */",15.43
+2215_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,,not_needed,no_debt_finding,0,,,,0.0
+3102_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param expectations,verified,,1,add:@param expectations,,"    /**
+     * Specifies the expected invocations that the object under test will perform upon
+     * objects in its context during the test.
+     * 
+     * The builder is responsible for interpreting high-level, readable API calls to 
+     * construct an expectation.
+     * 
+     * This method can be called multiple times per test and the expectations defined in
+     * each block are combined as if they were defined in same order within a single block.
+     *
+     * @param expectations The builder responsible for interpreting high-level, readable API calls to construct an expectation.
+     */",2.54
+12544_debt,debt,structural,structural,qwen2.5-coder:7b,zeroshot,structural,@param T0;@param T1;@param T10;@param T11;@param T12;@param T13;@param T2;@param T3;@param T4;@param T5;@param T6;@param T7;@param T8;@param T9;@param type0;@param type1;@param type10;@param type11;@param type12;@param type13;@param type2;@param type3;@param type4;@param type5;@param type6;@param type7;@param type8;@param type9,verified,,1,remove:@param T0;remove:@param T1;remove:@param T10;remove:@param T11;remove:@param T12;remove:@param T13;remove:@param T2;remove:@param T3;remove:@param T4;remove:@param T5;remove:@param T6;remove:@param T7;remove:@param T8;remove:@param T9;add:@param type0;add:@param type1;add:@param type2;add:@param type3;add:@param type4;add:@param type5;add:@param type6;add:@param type7;add:@param type8;add:@param type9;add:@param type10;add:@param type11;add:@param type12;add:@param type13,,"	/**
+	 * Specifies the types for the CSV fields. This method parses the CSV data to a 14-tuple
+	 * which has fields of the specified types.
+	 * This method is overloaded for each possible length of the tuples to support type safe
+	 * creation of data sets through CSV parsing.
+	 *
+	 * @param type0 The type of CSV field 0 and the type of field 0 in the returned tuple type.
+	 * @param type1 The type of CSV field 1 and the type of field 1 in the returned tuple type.
+	 * @param type2 The type of CSV field 2 and the type of field 2 in the returned tuple type.
+	 * @param type3 The type of CSV field 3 and the type of field 3 in the returned tuple type.
+	 * @param type4 The type of CSV field 4 and the type of field 4 in the returned tuple type.
+	 * @param type5 The type of CSV field 5 and the type of field 5 in the returned tuple type.
+	 * @param type6 The type of CSV field 6 and the type of field 6 in the returned tuple type.
+	 * @param type7 The type of CSV field 7 and the type of field 7 in the returned tuple type.
+	 * @param type8 The type of CSV field 8 and the type of field 8 in the returned tuple type.
+	 * @param type9 The type of CSV field 9 and the type of field 9 in the returned tuple type.
+	 * @param type10 The type of CSV field 10 and the type of field 10 in the returned tuple type.
+	 * @param type11 The type of CSV field 11 and the type of field 11 in the returned tuple type.
+	 * @param type12 The type of CSV field 12 and the type of field 12 in the returned tuple type.
+	 * @param type13 The type of CSV field 13 and the type of field 13 in the returned tuple type.
+	 * @return The {@link eu.stratosphere.api.java.DataSet} representing the parsed CSV data.
+	 */",18.82

@@ -1,0 +1,321 @@
+item_id,label,debt_type,mode,model,pattern,detected,plan,status,reason,attempts,changes,unresolved,repaired_doc,seconds
+12470_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param ogmLoadingContext;@param qp;@param returnProxies;@param session;@return,verified,,1,add:@param session;add:@param qp;add:@param ogmLoadingContext;add:@param returnProxies;add:@return,,"	/**
+	 * Execute the physical query and initialize the various entities and collections
+	 *
+	 * @param session The Hibernate session implementor.
+	 * @param qp The query parameters containing necessary information for the query execution.
+	 * @param ogmLoadingContext The context used for loading OGM (Object-Graph Mapping) data.
+	 * @param returnProxies Indicates whether to return proxies or not.
+	 * @return A list of hydrated objects resulting from the query execution.
+	 */",7.04
+12356_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.18
+11367_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@throws IOException,verified,,2,add:@throws IOException,,"    /**
+     * Link all Experiments to the assocaited Soil Profile and Weather Station.
+     * <p>
+     * <strong>NOTE:</strong>This must be called prior to calling
+     * {@link AceExperiment#getWeather} or {@link AceExperiment#getSoil} or
+     * a {@code NullPointerException} will be thrown.
+     * <p>
+     * Loops through all the experiments to link the Soil Profile and Weather
+     * station to each experiment. It first attempts to bind to the {@code wid}
+     * or {@code sid} of the experiment, falling back on the {@code wst_id}
+     * or {@code soil_id}. If no association is found,
+     * {@link AceFunctions#getBlankComponent} is called.
+     *
+     * @throws IOException if an I/O error occurs while processing the experiments
+     */",17.34
+10520_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,clean,,not_needed,no_debt_finding,0,,,,0.68
+12389_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.08
+12463_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param blendFunc,verified,,1,add:@param blendFunc,,"	/**
+	 * Enables usage of diffuse algorithm and sets specified blending mode
+	 * 
+	 * <p>If set to true lights are blended using the diffuse shader. This is
+	 * more realistic model than normally used as it preserve colors but might
+	 * look bit darker and also it might improve performance slightly.
+	 *
+	 * @param blendFunc The blending function to be used for diffuse lighting.
+	 */",2.75
+8588_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param locks;@param locksKVs,verified,,1,remove:@param locks;add:@param locksKVs,,"  /**
+   * Attempts to roll forward or roll back a set of locks encountered by a transaction reading data.
+   *
+   * @param env environment
+   * @param startTs The logical start time from the oracle of the transaction that encountered the
+   *        lock
+   * @param stats Stats object for the transaction that encountered the lock
+   * @param locksKVs List of key-value pairs representing the locks.
+   * @param startTime The wall time that the transaction that encountered the lock first saw the
+   *        lock
+   * @return true if all locks passed in were resolved (rolled forward or back)
+   */",6.8
+12215_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param form,verified,,1,add:@param form,,"    /**
+     * Attempts to redirect the user's browser can be redirected to the URI provided in a query
+     * parameter named by {@link #getRedirectQueryName()}.
+     * 
+     * Uses a configured fixed redirect URI or a default redirect URI if they are not setup.
+     * 
+     * @param request
+     *            The current request.
+     * @param response
+     *            The current response.
+     * @param form The form containing additional parameters (optional).
+     */",5.68
+2468_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.81
+6749_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param cookieAttribute;@param cookieAttributes;description,verified,,1,remove:@param cookieAttribute;replace:description;add:@param cookieAttributes,,"    /**
+     * Allows Cookie attributes to be set on a particular Cookie specified by the
+     * cookieName parameter.
+     *
+     * Once the Cookie has been added to the Response, the removeCookieAttribute
+     * method is called for the same cookieName.
+     *
+     * Currently, the only Cookie attribute that is supported by the runtime here
+     * is the SameSite Cookie attribute. All other existing Cookie attributes must 
+     * be added via the Cookie API. Using this API to add anything but a SameSite attribute
+     * will be ignored.
+     *
+     * The cookieAttributes should be in the form: attributeName=attributeValue.
+     *
+     * @param cookieName - The Cookie name to add the attribute to.
+     * @param cookieAttributes - The attributes to be added to the Cookie, formatted as attributeName=attributeValue. Currently, only SameSite=Lax|None|Strict is supported.
+     */",15.46
+6785_debt,debt,semantic,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,4.7
+1629_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param type;@param version;@return,verified,,1,add:@param version;add:@param type;add:@return,,"    /**
+     * Allows patch-level changes if a minor version is specified on the comparator. Allows minor-level changes if not.
+     *
+     * @param version The version string to be processed.
+     * @param type    The type of semver (NPM or COCOAPODS).
+     * @return A Requirement object representing the tilde requirement.
+     */",5.14
+3299_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param type,verified,,1,add:@param type,,"    /**
+     * Builds the backbone object from the computed backbone literals.
+     * @param variables relevant variables
+     * @param type      The type of backbone to build, which determines how variables are categorized.
+     * @return backbone
+     */",4.45
+11387_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,debt,@return,failed,claim_still_present,2,,,,15.61
+12502_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param endPoint;@param startPoint,verified,,1,add:@param startPoint;add:@param endPoint,,"	/**
+	 * Add numberOfPoints points to the path to create a great circle from startPoint to endPoint.
+	 *
+	 * @param startPoint The starting point of the great circle.
+	 * @param endPoint The ending point of the great circle.
+	 */",3.28
+147_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param changeListener;@param inputType;@param maxLength;@return,verified,,1,add:@param maxLength;add:@param inputType;add:@param changeListener;add:@return,,"	/**
+	 * Frontends may or may not provide special Inputs. Even a single Frontend
+	 * can sometimes support those Inputs and sometimes not. For example a HTML
+	 * Frontend depends on the used Browser. Firefox and Microsoft didn't
+	 * support date and time Inputs for a long time. Also the used device or the
+	 * user preferences can influence whether the returned Optional is empty or
+	 * contains an Input.
+	 *
+	 * @param maxLength    the maximum length of the input
+	 * @param inputType    the type of the input
+	 * @param changeListener the listener to be notified when the input changes
+	 * @return an Optional containing the created Input if available; otherwise, an empty Optional
+	 */",4.59
+12364_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@throws IOException,verified,,1,add:@throws IOException,,"   /**
+    * Create the proper stream wrapper to handling the rpmIS payload section based on the
+    * payload compression header tag.
+    *
+    * @param header
+    * @param rpmIS
+    * @return
+    * @throws IOException If an error occurs while creating the compressed stream or if the compression type is not supported.
+    */",5.56
+12482_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param currentIndex,verified,,1,remove:@param currentIndex,,"    /**
+     * Simple info message for status
+     * 
+     * @param tag Message to print out at start of info message
+     */",2.87
+10229_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param includes,verified,,1,add:@param includes,,"	/**
+	 * Get a folder.
+	 * 
+	 * It mirrors to the following Smartsheet REST API method: GET /folder/{id}
+	 * 
+	 * Exceptions:
+	 *   InvalidRequestException : if there is any problem with the REST API request
+	 *   AuthorizationException : if there is any problem with the REST API authorization(access token)
+	 *   ResourceNotFoundException : if the resource can not be found
+	 *   ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting)
+	 *   SmartsheetRestException : if there is any other REST API related error occurred during the operation
+	 *   SmartsheetException : if there is any other error occurred during the operation
+	 *
+	 * @param folderId the folder id
+	 * @param includes enum set of source inclusion options
+	 * @return the folder (note that if there is no such resource, this method will throw ResourceNotFoundException
+	 * rather than returning null)
+	 * @throws SmartsheetException the smartsheet exception
+	 */",9.86
+3263_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,0.97
+11390_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param skipTypeCheck,failed,claim_still_present,2,,,,26.87
+240_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.09
+1661_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.16
+7525_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,2.25
+4602_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,clean,,not_needed,no_debt_finding,0,,,,0.7
+3856_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.37
+5715_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.24
+10736_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param txNum,verified,,1,remove:@param txNum,,"	/**
+	 * Pins a buffer to a new block in the specified file, potentially waiting
+	 * until a buffer becomes available. If no buffer becomes available within a
+	 * fixed time period, then repins all currently holding blocks.
+	 * 
+	 * @param fileName
+	 *            the name of the file
+	 * @param fmtr
+	 *            the formatter used to initialize the page
+	 * @return the buffer pinned to that block
+	 */",5.25
+10231_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param parameters,verified,,1,add:@param parameters,,"	/**
+	 * List folders of a given workspace.
+	 * 
+	 * It mirrors to the following Smartsheet REST API method: GET /workspace/{id}/folders
+	 * 
+	 * Exceptions: 
+	 *   - InvalidRequestException : if there is any problem with the REST API request 
+	 *   - AuthorizationException : if there is any problem with the REST API authorization(access token) 
+	 *   - ResourceNotFoundException : if the resource can not be found 
+	 *   - ServiceUnavailableException : if the REST API service is not available (possibly due to rate limiting) 
+	 *   - SmartsheetRestException : if there is any other REST API related error occurred during the operation 
+	 *   - SmartsheetException : if there is any other error occurred during the operation
+	 *
+	 * @param workspaceId the ID of the workspace
+	 * @param parameters pagination parameters for the request
+	 * @return the folders (note that empty list will be returned if there is none)
+	 * @throws SmartsheetException the smartsheet exception
+	 */",5.37
+12456_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.01
+4379_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.27
+1068_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param n,verified,,1,add:@param n,,"    /**
+     * Trims textual content of this node, removes empty text and
+     * CDATA children, recurses into its child nodes.
+     * @param n       the node whose textual content is to be trimmed and processed
+     * @param normalize whether to normalize whitespace as well
+     */",3.94
+2215_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.65
+11262_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param appContext,verified,,1,add:@param appContext,,"    /**
+     *  This is one of two possible entry points for interacting with the library. This method creates a new Client object
+     *  which represents your app's connection to the cloud infrastructure.  This method does NOT automatically call the
+     *  client.connect() method after the client is created, so your app will need to call it when it is ready to
+     *  connect.
+     *
+     * @param appContext The application context for the client.
+     *  @return A Respoke Client instance
+     */",5.43
+2596_debt,debt,semantic,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.01
+10905_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param metric;@param value,verified,,1,remove:@param value;add:@param metric,,"/**
+     * Evaluates if the passed in value falls inside the range. The negation is
+     * ignored.
+     *
+     * @param metric
+     *            The metric containing the value to evaluate.
+     * @param prefix
+     *            Used to multiply the range boundaries.
+     *
+     * @return <code>true</code> if the value falls inside the range. The
+     *         negation ('^') is ignored.
+     */",4.96
+12519_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,clean,,not_needed,no_debt_finding,0,,,,0.47
+12407_debt,debt,semantic,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.07
+413_debt,debt,semantic,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.65
+1454_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.19
+12347_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param tc;@param type1,verified,,1,add:@param tc;add:@param type1,,"    /**
+     * Returns the default flags for a Type-2 message created in response
+     * to the given Type-1 message in the current environment.
+     *
+     * @param tc The CIFS context, which provides configuration settings.
+     * @param type1 The Type-1 message containing initial negotiation flags.
+     * @return An <code>int</code> containing the default flags.
+     */",5.08
+12293_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.1
+6552_debt,debt,semantic,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.02
+12300_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.13
+4959_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param target;@return,failed,claim_still_present,2,,,,16.54
+12362_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.13
+4051_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param dnssecMode,verified,,1,add:@param dnssecMode,,"    /**
+     * Returns a list of HostAddresses under which the specified XMPP server can be reached at for client-to-server
+     * communication. A DNS lookup for a SRV record in the form ""_xmpp-client._tcp.example.com"" is attempted, according
+     * to section 3.2.1 of RFC 6120. If that lookup fails, it's assumed that the XMPP server lives at the host resolved
+     * by a DNS lookup at the specified domain on the default port of 5222.
+     * <p>
+     * As an example, a lookup for ""example.com"" may return ""im.example.com:5269"".
+     * </p>
+     *
+     * @param domain the domain.
+     * @param failedAddresses on optional list that will be populated with host addresses that failed to resolve.
+     * @param dnssecMode the DNSSEC mode to use during the resolution process.
+     * @return List of HostAddress, which encompasses the hostname and port that the
+     *      XMPP server can be reached at for the specified domain.
+     */",10.45
+3783_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param mediaManagerName;@return,verified,,1,add:@param mediaManagerName;add:@return,,"    /**
+     * The jingle session may have one or more media managers that are trying to establish media sessions.
+     * When the media manager succeeds in creating a media session is registers it with the session by the
+     * media manager's static name. This routine is where other objects can access the registered media sessions.
+     * NB: If the media manager has not succeeded in establishing a media session then this could return null.
+     *
+     * @param mediaManagerName The name of the media manager whose media session is to be retrieved.
+     * @return The media session if it exists; otherwise, null.
+     */",3.61
+11390_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@throws IOException,verified,,2,add:@throws IOException,,"	/**
+	 * Update a key-value entry in a component.
+	 * <p>
+	 * Update a key-value pair in this component, base on the following
+	 * conditions:
+	 * <p>
+	 * <ul>
+	 * <li> {@code removeMode} overrides all other arguments.
+	 * <li> if {@code key} does not belong in this component,
+	 * it will not be added, unless {@code skipTypeCheck} is {@code true}</li>
+	 * </ul>
+	 * <p>
+	 * This method can be chained.
+	 *
+	 * @param key key for the JSON value in this component.
+	 * @param newValue new value for the {@code key} in this component.
+	 * @param addIfMissing if {@code true} add this value to the component.
+	 * @param skipTypeCheck if {@code true} skip the type checking for insertion.
+	 * @param removeMode if {@code true} remove this value from the component.
+	 * @return {@code this} component after being updated.
+	 * @throws IOException If an I/O error occurs during the update process.
+	 */",23.76
+5937_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.54
+12291_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param proxy;@param proxyPort;@param proxyUrl,verified,,1,remove:@param proxyPort;remove:@param proxyUrl;add:@param proxy,,"    /**
+     * Sets the proxy that will be used by <b>ALL</b> JDA instances.<br>
+     * Once this is set <b>IT CANNOT BE CHANGED.</b><br>
+     * After a JDA instance as been created, this method can never be called again, even if you are creating a new JDA object.<br>
+     * <b>Note:</b> currently this only supports HTTP proxies.
+     *
+     * @param proxy
+     *          The {@link HttpHost} representing the proxy to be used.
+     * @return
+     *      Returns the {@link net.dv8tion.jda.core.JDABuilder JDABuilder} instance. Useful for chaining.
+     * @throws UnsupportedOperationException
+     *          If this method is called after proxy settings have already been set or after at least 1 JDA object has been created.
+     */",12.38
+12388_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.14
+12450_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.19
+12351_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.28
+6491_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.22
+12527_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param buf,verified,,1,add:@param buf,,"  /**
+   * locate translation
+   *
+   * @param buf The StringBuilder to append the result to.
+   * @param parsedArgs arguments
+   * @throws SQLException if something wrong happens
+   */",5.42
+12474_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param os;@param version;@throws IOException,verified,,1,add:@param os;add:@param version;add:@throws IOException,,"  /**
+   * Writes FSA magic and version.
+   *
+   * @param os     the output stream to which the data is written
+   * @param version the version byte to be written
+   * @throws IOException if an I/O error occurs
+   */",3.75
+3378_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,clean,,not_needed,no_debt_finding,0,,,,0.63
+3097_debt,debt,structural,pipeline,qwen2.5-coder:7b,zeroshot,debt,@param namingScheme,verified,,1,add:@param namingScheme,,"    /**
+     * Changes the naming scheme used to generate names for mock objects that 
+     * have not been explicitly named in the test.
+     * 
+     * The default naming scheme names mock objects by lower-casing the first
+     * letter of the class name, so a mock object of type BananaSplit will be
+     * called ""bananaSplit"" if it is not explicitly named in the test.
+     *
+     * @param namingScheme The new naming scheme to be used.
+     */",3.23
+5732_clean,clean,clean,pipeline,qwen2.5-coder:7b,zeroshot,abstain,,not_needed,no_debt_finding,0,,,,1.09
