@@ -310,9 +310,9 @@ def decide_client(app_settings, monkeypatch):
 
     calls = []
 
-    def fake_decide(settings, store, request, decision, installation_id):
+    def fake_decide(settings, store, request, decision, installation_id, reason=None):
         calls.append((request.short_id, decision, installation_id))
-        store.mark_resolved(request.short_id, decision)
+        store.mark_resolved(request.short_id, decision, reason)
         return DecisionOutcome(DecisionStatus.APPLIED, "Applied the fix.", "abcdef1")
 
     monkeypatch.setattr("docdebt.service.app._decide_from_dashboard", fake_decide)
@@ -392,7 +392,7 @@ def test_dashboard_decision_falls_back_to_the_repository_installation(decide_cli
 def test_dashboard_decision_failure_is_reported_not_crashed(app_settings, monkeypatch):
     from dataclasses import replace
 
-    def boom(*args):
+    def boom(*args, **kwargs):
         raise RuntimeError("GitHub unreachable")
 
     monkeypatch.setattr("docdebt.service.app._decide_from_dashboard", boom)

@@ -1,8 +1,88 @@
 import { Link, useParams } from "react-router-dom";
-import { StateNote, formatDate, marker, repoPath } from "../components.jsx";
+import { RejectButton, StateNote, formatDate, marker, repoPath } from "../components.jsx";
 import { useApi, useDecision } from "../hooks.js";
 
 const ACTION_LABELS = { add: "added", remove: "removed", replace: "rewritten" };
+
+const SOURCE_LABELS = {
+  siblings: "same file",
+  callees: "called method",
+  similar: "similar method",
+  validated: "accepted fix",
+  tests: "test",
+  readme: "README",
+};
+
+// What the post-validation (layer 4 of the hybrid mechanism) did with each
+// field the model answered.
+const OUTCOMES = {
+  accepted: { cls: "ok", text: "accepted" },
+  accepted_after_retry: { cls: "ok", text: "accepted on retry" },
+  kept: { cls: "", text: "kept as is (the model judged it correct)" },
+  kept_no_verdict: { cls: "", text: "kept (no verdict)" },
+  write_failed: { cls: "error", text: "not written" },
+  write_flagged: { cls: "warn", text: "written, names an identifier absent from the code" },
+  reverted_format: { cls: "warn", text: "reverted: broken format" },
+  reverted_hallucination: { cls: "warn", text: "reverted: invented identifier" },
+  reverted_cosmetic: { cls: "", text: "reverted: cosmetic change only" },
+  reverted_deletion_only: { cls: "warn", text: "reverted: only removed text" },
+  ignored_extra_key: { cls: "", text: "ignored: field not asked" },
+};
+
+function Badge({ children, cls = "", title }) {
+  return (
+    <span className={`badge ${cls}`} title={title}>
+      {children}
+    </span>
+  );
+}
+
+function ContextBlock({ items, title, help }) {
+  if (!items?.length) return null;
+  return (
+    <details className="rag-context">
+      <summary>
+        {title} <span className="muted">· {items.length} excerpt(s)</span>
+      </summary>
+      <p className="field-help">{help}</p>
+      <ul className="rag-items">
+        {items.map((item, i) => (
+          <li key={i}>
+            <div className="rag-item-head">
+              <Badge cls={`source ${item.source}`}>{SOURCE_LABELS[item.source] || item.source}</Badge>
+              <span className="mono">{item.label}</span>
+              {item.score != null && <span className="muted">score {item.score}</span>}
+            </div>
+            <pre className="code-block small">{item.text}</pre>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+function FieldLog({ log }) {
+  if (!log?.length) return null;
+  return (
+    <details className="warnings">
+      <summary>Post-validation: what was kept from the model&apos;s answer ({log.length} field(s))</summary>
+      <ul className="mini-table field-log">
+        {log.map((e, i) => {
+          const o = OUTCOMES[e.outcome] || { cls: "", text: e.outcome };
+          return (
+            <li key={i}>
+              <span className="mono">{e.key}</span>
+              <span className={`feed-result ${o.cls}`}>
+                {o.text}
+                {e.detail ? ` (${e.detail})` : ""}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </details>
+  );
+}
 
 function DiffBlock({ lines }) {
   return (
@@ -72,9 +152,7 @@ function DecisionBar({ proposal, decisionsEnabled, decisions }) {
         <button type="button" className="decide-btn accept big" disabled={busy} onClick={() => decisions.decide(proposal, "accept")}>
           {busy ? "Working…" : "Accept"}
         </button>
-        <button type="button" className="decide-btn reject big" disabled={busy} onClick={() => decisions.decide(proposal, "reject")}>
-          Reject
-        </button>
+        <RejectButton proposal={proposal} busy={busy} onDecide={decisions.decide} big />
       </span>
       {result && <span className={`feed-result ${result.ok ? "ok" : "error"}`}>{result.message}</span>}
     </div>
@@ -147,8 +225,11 @@ export default function ProposalDetail() {
                   )}
                   {d.detection.model && (
                     <p className="field-help">
-                      Semantic check by {d.detection.model}
-                      {d.detection.confidence != null && `, confidence ${Math.round(d.detection.confidence * 100)}%`}.
+                      Semantic check by <Badge cls="model">{d.detection.model}</Badge>
+                      {d.detection.confidence != null && ` confidence ${Math.round(d.detection.confidence * 100)}%`}
+                      {d.detection.screened_on &&
+                        ` · uses the detection prompts screened on ${d.detection.screened_on} (same model family)`}
+                      .
                     </p>
                   )}
                 </section>
@@ -179,9 +260,19 @@ export default function ProposalDetail() {
                     </table>
                   )}
                   <p className="field-help">
-                    Written by {d.repair.model || "the model"} in {d.repair.attempts} attempt(s), then {d.repair.status} by the
-                    Verifier: no structural error left, every other line of the Javadoc unchanged.
+                    Written by <Badge cls="model">{d.repair.model || "the model"}</Badge> with the{" "}
+                    <Badge cls={`mechanism ${d.repair.mechanism}`}>{d.repair.mechanism}</Badge> mechanism in{" "}
+                    {d.repair.attempts} attempt(s), then {d.repair.status} by the Verifier: no structural error left
+                    {d.repair.mechanism === "hybrid"
+                      ? ", every untouched line of the Javadoc byte-identical (structural plan first, the model only writes or judges the fields it is asked about)."
+                      : ", every other line of the Javadoc unchanged."}
                   </p>
+                  <FieldLog log={d.repair.field_log} />
+                  <ContextBlock
+                    items={d.rag_context}
+                    title="Project context used (RAG)"
+                    help="Excerpts of this repository retrieved for this method and given to the model as reference only: documented methods of the same file, the methods it calls, similar documented methods, fixes reviewers accepted, tests and the README."
+                  />
                 </section>
 
                 <section className="detail-section">

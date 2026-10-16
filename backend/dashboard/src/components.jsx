@@ -95,6 +95,50 @@ export function StatTiles({ tiles }) {
   );
 }
 
+export const REJECT_REASONS = [
+  { key: "false_positive", label: "False positive", help: "The documentation was right: there was no debt." },
+  { key: "incorrect_fix", label: "Incorrect fix", help: "The debt is real but the proposed Javadoc is wrong." },
+  { key: "manual", label: "I'll fix it myself", help: "The debt is real; the author prefers to write the fix." },
+  { key: "other", label: "Other", help: "Any other reason." },
+];
+
+// Reject in two clicks: "Reject", then "Why?" — the reason is what the
+// precision and the threshold suggestion learn from. "No reason" still works.
+export function RejectButton({ proposal, busy, onDecide, big = false }) {
+  const [open, setOpen] = useState(false);
+  const choose = (reason) => {
+    setOpen(false);
+    onDecide(proposal, "reject", reason);
+  };
+  return (
+    <span className="reject-menu">
+      <button
+        type="button"
+        className={`decide-btn reject${big ? " big" : ""}`}
+        disabled={busy}
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        title="Dismiss this proposal; nothing is committed"
+      >
+        Reject ▾
+      </button>
+      {open && (
+        <span className="reject-popover" role="menu">
+          <span className="reject-why">Why?</span>
+          {REJECT_REASONS.map((r) => (
+            <button key={r.key} type="button" role="menuitem" title={r.help} onClick={() => choose(r.key)}>
+              {r.label}
+            </button>
+          ))}
+          <button type="button" role="menuitem" className="muted" onClick={() => choose(null)}>
+            No reason
+          </button>
+        </span>
+      )}
+    </span>
+  );
+}
+
 function DecisionButtons({ proposal, busy, onDecide }) {
   return (
     <span className="decision-buttons">
@@ -107,16 +151,78 @@ function DecisionButtons({ proposal, busy, onDecide }) {
       >
         Accept
       </button>
-      <button
-        type="button"
-        className="decide-btn reject"
-        disabled={busy}
-        onClick={() => onDecide(proposal, "reject")}
-        title="Dismiss this proposal; nothing is committed"
-      >
-        Reject
-      </button>
+      <RejectButton proposal={proposal} busy={busy} onDecide={onDecide} />
     </span>
+  );
+}
+
+export function percent(value) {
+  return value == null ? "—" : `${Math.round(value * 100)}%`;
+}
+
+const MECHANISM_LABELS = { hybrid: "hybrid", regeneration: "regeneration" };
+const REASON_LABELS = Object.fromEntries(REJECT_REASONS.map((r) => [r.key, r.label]));
+
+// Observed precision: accepted / (accepted + rejected) over a period, with
+// the breakdowns that explain it. Shown once there are enough decisions.
+export function PrecisionCard({ precision, title = "Observed precision" }) {
+  const p = precision;
+  return (
+    <div className="panel precision-card">
+      <div className="panel-heading">
+        <h2>{title}</h2>
+        <span className="field-hint">last {p.days} days</span>
+      </div>
+      {p.decisions === 0 ? (
+        <p className="state-note">No accepted or rejected proposal yet: each decision is a label DocDebt learns from.</p>
+      ) : (
+        <>
+          <div className="precision-head">
+            <span className={`precision-value ${p.enough ? "" : "muted"}`}>{percent(p.precision)}</span>
+            <span className="field-help">
+              {p.accepted} accepted / {p.decisions} decided
+              {!p.enough && ` · indicative until ${p.min_decisions} decisions`}
+            </span>
+          </div>
+          <div className="precision-grid">
+            {[
+              ["By debt kind", p.by_kind, (k) => k],
+              ["By model", p.by_model, (k) => k],
+              ["By repair mechanism", p.by_mechanism, (k) => MECHANISM_LABELS[k] || k],
+            ].map(([label, rows, fmt]) =>
+              rows.length ? (
+                <div key={label}>
+                  <div className="quote-label">{label}</div>
+                  <ul className="mini-table">
+                    {rows.map((r) => (
+                      <li key={r.key}>
+                        <span className="mono">{fmt(r.key)}</span>
+                        <span>
+                          {percent(r.precision)} <span className="muted">({r.accepted}/{r.accepted + r.rejected})</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null,
+            )}
+            {Object.keys(p.reject_reasons).length > 0 && (
+              <div>
+                <div className="quote-label">Why proposals were rejected</div>
+                <ul className="mini-table">
+                  {Object.entries(p.reject_reasons).map(([k, n]) => (
+                    <li key={k}>
+                      <span>{REASON_LABELS[k] || k}</span>
+                      <span>{n}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -150,7 +256,8 @@ export function ProposalList({ proposals, decisionsEnabled, decisions, showRepo 
                 </Link>
               </div>
               <div className="feed-meta">
-                {m.label} · {absoluteDates ? formatDate(p.created_at) : timeAgo(p.created_at)} ·{" "}
+                {m.label}
+                {p.reject_reason && ` (${REASON_LABELS[p.reject_reason] || p.reject_reason})`} · {absoluteDates ? formatDate(p.created_at) : timeAgo(p.created_at)} ·{" "}
                 <span className="mono">{p.file_path}</span>
                 {pending && !decisionsEnabled && (
                   <>

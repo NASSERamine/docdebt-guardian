@@ -29,13 +29,15 @@ export function useApi(paths, { refreshMs = 0, reloadKey = 0 } = {}) {
 }
 
 // Accept / reject a proposal; same effect as a `/docdebt accept|reject <id>`
-// reply on the PR. `results` maps short_id -> { ok, message } for display.
+// reply on the PR. A rejection can carry a reason (false_positive,
+// incorrect_fix, manual, other): it feeds the observed precision.
+// `results` maps short_id -> { ok, message } for display.
 export function useDecision(onDone) {
   const [busyId, setBusyId] = useState(null);
   const [results, setResults] = useState({});
 
   const decide = useCallback(
-    async (proposal, decision) => {
+    async (proposal, decision, reason = null) => {
       const label = `${proposal.method_label} (${proposal.owner}/${proposal.repo}#${proposal.pr_number})`;
       if (decision === "accept" && !window.confirm(`Commit the fix for ${label} to the pull request branch?`)) {
         return;
@@ -45,6 +47,7 @@ export function useDecision(onDone) {
       try {
         const { status, body } = await sendWithToken("POST", `/api/proposals/${proposal.short_id}/decide`, {
           decision,
+          ...(reason ? { reason } : {}),
         });
         if (status === 200) setResult(body.status !== "not_applied" && body.status !== "expired", body.message);
         else if (status !== 0) setResult(false, errorText(body, status));

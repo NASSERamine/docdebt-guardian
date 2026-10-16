@@ -60,6 +60,11 @@ class DocDebtState(TypedDict):
     changes: NotRequired[list[dict]]
     unresolved: NotRequired[list[str]]
     repair_attempts: NotRequired[int]
+    repair_mechanism: NotRequired[str]  # "hybrid" | "regeneration"
+    field_log: NotRequired[list[dict]]  # hybrid mechanism: per-field post-validation outcome
+    rag_context: NotRequired[
+        list[dict]
+    ]  # retrieved excerpts given to the model (source, label, path, score, text)
 
     review_decision: NotRequired[str | None]  # ReviewDecision, set by the human
     final: NotRequired[str]  # FinalOutcome

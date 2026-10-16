@@ -306,6 +306,54 @@ internet. Real GitHub webhooks (a PR opened on a repo you connected) still
 need `cloudflared` pointed at port 8000, exactly as in "GitHub App service"
 below — the dashboard does not change that part.
 
+## Service v2: cascade, hybrid repair, RAG, check run, health, learning
+
+**Local -> cloud cascade.** The local model (`DOCDEBT_LOCAL_MODEL`, Ollama)
+answers first. `DOCDEBT_CLOUD_MODEL` (e.g. `gpt-5.6-luna`, with
+`OPENAI_API_KEY`) is asked only when the local model fails or is not
+confident enough, only on repositories whose policy allows it (repository
+page -> *Repository policy*, off by default) and within the cost cap.
+`gpt-5.6-luna` reuses the detection prompts screened on `gpt-5.6`; its
+repairs always use the hybrid mechanism.
+
+**Hybrid repair** (`docdebt.repair`, default). The research pipeline in four
+layers: (1) a deterministic structural plan (renamed parameters keep their
+text, phantom tags are deleted), (2) semantic triage, (3) a small JSON prompt
+where the model only writes missing fields and judges disputed ones,
+(4) post-validation that reverts invented identifiers, cosmetic edits and
+deletion-only changes, then a span patch that keeps every untouched line
+byte-identical. The proposal page shows what layer 4 kept or reverted.
+`DOCDEBT_REPAIR_MECHANISM=regeneration` brings back whole-block regeneration.
+
+**Knowledge base (RAG).** One per repository, in the state database:
+documented methods without structural debt, tests, README sections, and
+every fix a reviewer accepted. For each method, the most relevant excerpts
+(same file, called methods, similar methods, accepted fixes, tests, README)
+are given to the model as reference only; the proposal page lists them.
+Ranking uses Ollama embeddings (`ollama pull nomic-embed-text`) when
+available, BM25 otherwise. Sources and amount: dashboard *Settings*.
+
+**Documentation health.** *Analyse the default branch* on a repository page
+scans the default branch (deterministic, no LLM, no cost): share of public
+and protected methods documented without structural debt, trend, least
+healthy packages and files. The same scan rebuilds the knowledge base.
+
+**Check run.** Each review publishes a `DocDebt Guardian` check run on the
+PR's head commit, with an annotation at each Javadoc in debt. With *Block the
+merge on structural debt* on, it fails while structural debt is pending; make
+it a required check in the branch protection rules to block merging.
+**Permission change required:** on the App's page -> *Permissions & events*
+-> **Checks: Read and write** -> *Save changes*, then approve the new
+permission on each installation. Without it reviews still work; the check run
+is skipped (logged once).
+
+**Learning from decisions.** Rejecting asks *why* (false positive, incorrect
+fix, I'll fix it myself, other); `/docdebt reject <id> false-positive` works
+too. The dashboard shows the observed precision (overall, by debt kind,
+model and mechanism) and, from 20 decided semantic proposals, suggests the
+lowest confidence threshold reaching 80 % precision. Nothing changes until a
+person clicks *Apply to this repository*.
+
 ## Benchmark workflow (Qwen first, then GPT-5.6)
 
 All paths absolute; every script resumes where it stopped.

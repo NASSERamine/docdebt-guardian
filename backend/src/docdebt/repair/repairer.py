@@ -78,6 +78,9 @@ class RepairResult:
     model_id: str = ""
     prompt_version: str = ""
     reason: str = ""
+    mechanism: str = "regeneration"
+    # Per-field outcome of the hybrid mechanism's post-validation (layer 4).
+    field_log: list[dict] = field(default_factory=list)
 
     @property
     def llm_failed(self) -> bool:
@@ -97,7 +100,21 @@ def _hints(findings: list[Finding]) -> list[str]:
     return out
 
 
+def append_context(prompt: str, context: str | None) -> str:
+    """Add retrieved project context after a repair prompt, as reference only."""
+    if not context or not context.strip():
+        return prompt
+    return (
+        f"{prompt}\n\n--- ADDITIONAL PROJECT CONTEXT ---\n"
+        "Supplementary context from the same repository. Use it only to match the project's "
+        "vocabulary and conventions; base the repair on the method's own code.\n\n"
+        f"{context.strip()}\n--- END OF CONTEXT ---"
+    )
+
+
 class Repairer:
+    mechanism = "regeneration"
+
     def __init__(
         self,
         client: LLMClient,
@@ -114,7 +131,7 @@ class Repairer:
     def model_id(self) -> str:
         return self.client.spec.id
 
-    def repair(self, unit: MethodUnit, findings: list[Finding]) -> RepairResult:
+    def repair(self, unit: MethodUnit, findings: list[Finding], context: str | None = None) -> RepairResult:
         original = unit.javadoc or ""
         plan = plan_from_findings(unit, findings)
         result = RepairResult(unit.id, RepairStatus.NOT_NEEDED, original, plan=plan, model_id=self.model_id)
@@ -138,11 +155,12 @@ class Repairer:
                 hints=_hints(findings) if cfg.hint_findings and number == 1 else None,
                 feedback=feedback,
             )
+            prompt_text = append_context(prompt.text, context)
             result.prompt_version = prompt.version
             attempt = Attempt(number)
             result.attempts.append(attempt)
             try:
-                response = self.client.invoke(prompt.text, purpose="repair", max_tokens=budget)
+                response = self.client.invoke(prompt_text, purpose="repair", max_tokens=budget)
             except LLMError as exc:
                 attempt.error = str(exc)
                 continue

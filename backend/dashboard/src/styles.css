@@ -413,7 +413,9 @@ a:focus-visible {
 }
 .nav {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
+  min-width: 0;
 }
 .nav a {
   padding: 5px 10px;
@@ -1250,4 +1252,221 @@ a.primary-btn:hover {
   .hero h1 {
     font-size: 28px;
   }
+}
+
+/* -- reject reasons: "Reject ▾" opens "Why?" -- */
+
+.reject-menu {
+  position: relative;
+  display: inline-flex;
+}
+.reject-popover {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 170px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.reject-why {
+  font-size: 11px;
+  color: var(--ink-faint);
+  padding: 4px 8px;
+}
+.reject-popover button {
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.reject-popover button:hover {
+  background: var(--rejected-dim);
+}
+.reject-popover button.muted {
+  color: var(--ink-dim);
+}
+
+/* -- badges, small tables, insight cards -- */
+
+.muted {
+  color: var(--ink-dim);
+}
+.badge {
+  display: inline-block;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--ink-dim);
+  white-space: nowrap;
+}
+.badge.model {
+  color: var(--action);
+  border-color: var(--action-dim);
+}
+.badge.mechanism.hybrid,
+.badge.ok {
+  color: var(--accepted);
+  border-color: var(--accepted-dim);
+}
+.badge.source {
+  color: var(--pending);
+  border-color: var(--pending-dim);
+}
+.badge.source.validated {
+  color: var(--accepted);
+  border-color: var(--accepted-dim);
+}
+.feed-result.warn {
+  color: var(--pending);
+}
+.precision-card {
+  margin-top: 16px;
+}
+.precision-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.precision-value {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  font-weight: 600;
+}
+.precision-value.muted {
+  color: var(--ink-dim);
+}
+.precision-value.accepted,
+.mini-table .accepted,
+.delta.accepted {
+  color: var(--accepted);
+}
+.precision-value.pending,
+.mini-table .pending {
+  color: var(--pending);
+}
+.precision-value.rejected,
+.mini-table .rejected,
+.delta.rejected {
+  color: var(--rejected);
+}
+.delta {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.precision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-top: 10px;
+}
+.mini-table {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+}
+.mini-table li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--border);
+}
+.mini-table li > span:first-child {
+  min-width: 0;
+}
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field-log li {
+  align-items: baseline;
+}
+.field-log .feed-result {
+  margin-top: 0;
+  text-align: right;
+}
+.kb-counts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.chart-tip {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.plain-fieldset {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--action);
+  font-size: inherit;
+  text-decoration: underline;
+}
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 4px 16px;
+  width: 100%;
+  font-size: 13px;
+}
+
+/* -- RAG context on a proposal page -- */
+
+.rag-context {
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 12px;
+  background: var(--surface);
+}
+.rag-context summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.rag-items {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rag-item-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+  font-size: 12px;
 }

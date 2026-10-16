@@ -30,6 +30,71 @@ from docdebt.service.webhooks import CommentEvent, PullRequestEvent
 logger = logging.getLogger("docdebt.service")
 
 _MARKER = "<!-- docdebt:managed-comment -->"
+CHECK_NAME = "DocDebt Guardian"
+_CHECKS_FORBIDDEN: set[str] = set()  # installations without the "Checks" permission (logged once)
+
+
+def proposal_metadata(state: DocDebtState) -> dict:
+    """What a proposal is about, stored with it for learning from decisions."""
+    structural = [f for f in state.get("structural_findings", []) if f.get("severity") == "error"]
+    semantic = list(state.get("semantic_findings", []))
+    kind = "both" if structural and semantic else "structural" if structural else "semantic" if semantic else None
+    rules = sorted({f.get("rule") for f in structural + semantic if f.get("rule")})
+    unit = state.get("unit", {})
+    return {
+        "debt_kind": kind,
+        "rules": ",".join(rules) or None,
+        "confidence": state.get("detection_confidence") if semantic else None,
+        "detection_model": state.get("detection_model"),
+        "repair_model": state.get("repair_model"),
+        "repair_mechanism": state.get("repair_mechanism"),
+        "line": unit.get("javadoc_start_line") or unit.get("start_line"),
+    }
+
+
+def check_run_fields(
+    pending: list[ReviewRequest], *, block_on_structural: bool, public_url: str | None = None
+) -> dict:
+    """The check run that summarises a PR's pending documentation debt."""
+    structural = [r for r in pending if r.debt_kind in ("structural", "both")]
+    blocking = block_on_structural and bool(structural)
+    if not pending:
+        conclusion, title = "success", "No pending documentation debt"
+        summary = "No proposal is waiting for a decision on this pull request."
+    else:
+        conclusion = "failure" if blocking else "neutral"
+        title = f"{len(pending)} documentation fix{'es' if len(pending) > 1 else ''} waiting for a decision"
+        summary = f"{len(structural)} structural, {len(pending) - len(structural)} semantic. " + (
+            "Merging is blocked until every structural fix is accepted or rejected."
+            if blocking
+            else "Accept or reject each proposal in its PR comment or in the application."
+        )
+    lines = []
+    for r in pending:
+        link = f"{public_url.rstrip('/')}/dashboard/proposals/{r.short_id}" if public_url else None
+        where = f"`{r.file_path}:{r.line}`" if r.line else f"`{r.file_path}`"
+        lines.append(
+            f"- **{r.method_label}** ({where}) — {r.debt_kind or 'debt'}"
+            + (f": {r.rules}" if r.rules else "")
+            + (f" — [review]({link})" if link else f" — `/docdebt accept {r.short_id}`")
+        )
+    annotations = [
+        {
+            "path": r.file_path,
+            "start_line": r.line,
+            "end_line": r.line,
+            "annotation_level": "failure" if blocking and r in structural else "warning",
+            "title": f"Documentation debt in {r.method_label}",
+            "message": f"{r.debt_kind or 'Documentation'} debt ({r.rules or 'see proposal'}). "
+            f"A verified fix is waiting: /docdebt accept {r.short_id}",
+        }
+        for r in pending
+        if r.line
+    ][:50]
+    output = {"title": title, "summary": summary, "text": "\n".join(lines) or summary}
+    if annotations:
+        output["annotations"] = annotations
+    return {"status": "completed", "conclusion": conclusion, "output": output}
 
 
 def _method_label(unit: MethodUnit) -> str:
@@ -114,11 +179,22 @@ class ReviewFlow:
     short-id store. One instance handles every PR the service is watching."""
 
     def __init__(
-        self, github: GithubClient, graph: GraphApp, store: ReviewStore, tracker: UsageTracker | None = None
+        self,
+        github: GithubClient,
+        graph: GraphApp,
+        store: ReviewStore,
+        tracker: UsageTracker | None = None,
+        *,
+        knowledge=None,
+        public_url: str | None = None,
+        check_runs: bool = False,
     ) -> None:
         self.github = github
         self.graph = graph
         self.store = store
+        self.knowledge = knowledge
+        self.public_url = public_url
+        self.check_runs = check_runs
         self.extractor = Extractor()
         # Passed in by the caller (docdebt.service.app) as the SAME tracker given to
         # build_graph_deps, so its totals reflect every LLM call the graph actually
@@ -173,6 +249,9 @@ class ReviewFlow:
             for path in needed_paths
         }
         touched = extract_touched_units(diff, file_contents, self.extractor)
+        rag = getattr(self.graph.deps, "rag", None)
+        if rag is not None:
+            rag.set_files(file_contents)
 
         outcome = ReviewOutcome(proposed=0, skipped_no_debt=0, skipped_not_proposed=0, already_proposed=0)
         for unit in touched:
@@ -222,6 +301,7 @@ class ReviewFlow:
                 method_label=_method_label(unit),
                 head_sha=event.head_sha,
                 installation_id=event.installation_id,
+                metadata=proposal_metadata(state),
             )
             body = _proposal_body(unit, interrupted.value["repaired_doc"], interrupted.value["changes"], short_id)
             self.github.create_issue_comment(event.owner, event.repo, event.number, body)
@@ -238,7 +318,38 @@ class ReviewFlow:
             outcome.skipped_not_proposed,
         )
         self._log_usage("review", event.owner, event.repo, event.number, time.perf_counter() - started)
+        self.publish_check_run(event.owner, event.repo, event.number, event.head_sha)
         return outcome
+
+    # -- the PR's check run --------------------------------------------------------
+
+    def publish_check_run(self, owner: str, repo: str, pr_number: int, head_sha: str | None = None) -> None:
+        """Create or update the "DocDebt Guardian" check run of the PR's head.
+        Best effort: a missing "Checks" permission or an API error never
+        breaks a review or a decision."""
+        if not self.check_runs or self.github.installation_id in _CHECKS_FORBIDDEN:
+            return
+        try:
+            head_sha = head_sha or self.github.get_pull_request(owner, repo, pr_number)["head"]["sha"]
+            policy = self.store.repo_settings(owner, repo)
+            fields = check_run_fields(
+                self.store.pending_for_pr(owner, repo, pr_number),
+                block_on_structural=policy["block_on_structural"],
+                public_url=self.public_url,
+            )
+            self.github.upsert_check_run(owner, repo, head_sha, CHECK_NAME, **fields)
+        except GithubApiError as exc:
+            if exc.status_code == 403:
+                _CHECKS_FORBIDDEN.add(self.github.installation_id)
+                logger.warning(
+                    'check runs disabled for installation %s: give the GitHub App the "Checks: Read and '
+                    'write" permission to publish them',
+                    self.github.installation_id,
+                )
+            else:
+                logger.warning("could not publish the check run on %s/%s#%s: %s", owner, repo, pr_number, exc)
+        except Exception:
+            logger.exception("could not publish the check run on %s/%s#%s", owner, repo, pr_number)
 
     # -- on-demand scan (dashboard button) ---------------------------------------
 
@@ -290,13 +401,44 @@ class ReviewFlow:
     def handle_command(self, event: CommentEvent, command: SlashCommand) -> DecisionOutcome:
         self.github.add_reaction(event.owner, event.repo, event.comment_id)
         return self.decide(
-            command.short_id, command.decision, owner=event.owner, repo=event.repo, pr_number=event.issue_number
+            command.short_id,
+            command.decision,
+            owner=event.owner,
+            repo=event.repo,
+            pr_number=event.issue_number,
+            reason=command.reason,
         )
 
     # -- a decision, from a PR comment or from the dashboard -------------------
 
     def decide(
-        self, short_id: str, decision: str, *, owner: str, repo: str, pr_number: int, via: str | None = None
+        self,
+        short_id: str,
+        decision: str,
+        *,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        via: str | None = None,
+        reason: str | None = None,
+    ) -> DecisionOutcome:
+        outcome = self._decide(
+            short_id, decision, owner=owner, repo=repo, pr_number=pr_number, via=via, reason=reason
+        )
+        if outcome.status != DecisionStatus.NOT_FOUND:
+            self.publish_check_run(owner, repo, pr_number)
+        return outcome
+
+    def _decide(
+        self,
+        short_id: str,
+        decision: str,
+        *,
+        owner: str,
+        repo: str,
+        pr_number: int,
+        via: str | None = None,
+        reason: str | None = None,
     ) -> DecisionOutcome:
         """Resume the paused graph thread behind ``short_id`` with ``decision``
         ("accept" | "reject") and, on accept, commit the fix to the PR branch.
@@ -341,7 +483,7 @@ class ReviewFlow:
             )
 
         state = self.graph.resume(request.thread_id, decision)
-        self.store.mark_resolved(short_id, decision)
+        self.store.mark_resolved(short_id, decision, reason if decision == "reject" else None)
         self._log_usage("command", owner, repo, pr_number, time.perf_counter() - started)
 
         if decision != "accept" or state.get("final") != FinalOutcome.ACCEPTED.value:
@@ -408,6 +550,12 @@ class ReviewFlow:
                 f"GitHub rejected the commit for {request.method_label} (status {exc.status_code}).",
             )
         commit_sha = commit.get("commit", {}).get("sha", "")[:7]
+        if self.knowledge is not None:
+            # An accepted Javadoc becomes an example of this project's style for later repairs.
+            try:
+                self.knowledge.add_validated(owner, repo, unit_for_apply, state["repaired_doc"])
+            except Exception:
+                logger.exception("could not add the accepted Javadoc to the knowledge base")
         self.github.create_issue_comment(
             owner,
             repo,

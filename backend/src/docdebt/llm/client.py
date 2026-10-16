@@ -193,7 +193,16 @@ class LLMClient:
         self._factory = factory or default_chat_model_factory
         self._sleep = sleep
         self._temperature_supported = True
+        self._json_supported = spec.provider in ("openai", "ollama")
         self._models: dict[tuple[int, float | None], BaseChatModel] = {}
+
+    def _json_bound(self, model):
+        """The same chat model, asked for a JSON object only."""
+        if not isinstance(model, BaseChatModel) or type(model).__name__ not in ("ChatOpenAI", "ChatOllama"):
+            return model  # test doubles and other providers: plain call
+        if self.spec.provider == "openai":
+            return model.bind(response_format={"type": "json_object"})
+        return model.bind(format="json")
 
     def _model(self, max_tokens: int, temperature: float | None) -> BaseChatModel:
         key = (max_tokens, temperature)
@@ -208,6 +217,7 @@ class LLMClient:
         purpose: str = "default",
         max_tokens: int | None = None,
         temperature: float | None = None,
+        json_mode: bool = False,
     ) -> LLMResponse:
         """Send ``prompt`` and return the (cleaned) text answer.
 
@@ -216,6 +226,9 @@ class LLMClient:
             purpose: pattern or purpose used to pick the token budget.
             max_tokens: explicit budget, overriding the spec.
             temperature: explicit temperature, overriding the spec.
+            json_mode: ask the provider for a JSON object only (OpenAI
+                ``response_format``, Ollama ``format``). Providers or fakes
+                that do not support it are called normally.
 
         Raises:
             LLMError: when every attempt failed with an error.
@@ -231,9 +244,20 @@ class LLMClient:
             attempts += 1
             temp = wanted_temperature if self._temperature_supported else None
             try:
-                message = self._model(budget, temp).invoke([HumanMessage(content=prompt)])
+                model = self._model(budget, temp)
+                if json_mode and self._json_supported:
+                    model = self._json_bound(model)
+                message = model.invoke([HumanMessage(content=prompt)])
             except Exception as exc:  # noqa: BLE001 - provider errors vary widely
                 error_text = str(exc).lower()
+                if (
+                    json_mode
+                    and self._json_supported
+                    and ("response_format" in error_text or "json_object" in error_text)
+                ):
+                    self._json_supported = False  # this model rejects JSON mode: ask in plain text
+                    attempts -= 1
+                    continue
                 if (
                     self._temperature_supported
                     and "temperature" in error_text

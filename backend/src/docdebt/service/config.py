@@ -23,6 +23,16 @@ def _required(name: str) -> str:
     return value
 
 
+def _float_env(name: str) -> float | None:
+    value = os.environ.get(name)
+    if not value:
+        return None
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise ConfigError(f"Environment variable '{name}' must be a number, got {value!r}.") from exc
+
+
 @dataclass(frozen=True)
 class ServiceSettings:
     """Everything the service needs to talk to GitHub and run the graph.
@@ -59,6 +69,17 @@ class ServiceSettings:
         dashboard_token: shared secret the dashboard must send (``Authorization:
             Bearer <token>``) to accept or reject a proposal. ``None`` (the
             default) disables decisions from the dashboard: it stays read-only.
+        cloud_model: the paid model of the cascade (e.g. ``gpt-5.6-luna``),
+            asked only when the local model abstains, on repositories that
+            allow it, within the cost cap. Empty: no cloud model at all.
+        cloud_price_in_per_m / cloud_price_out_per_m: its price in USD per
+            million input / output tokens, for cost tracking and the cap.
+        repair_mechanism: ``hybrid`` (research hybrid Replacement, default)
+            or ``regeneration`` (whole-block regeneration with the screened
+            wordings; models without one use the hybrid mechanism).
+        rag_embeddings: knowledge-base embeddings: ``auto`` (Ollama if it
+            answers, else BM25), ``ollama``, ``openai`` or ``bm25``.
+        health_max_files: most Java files read by one repository health scan.
     """
 
     github_app_id: str
@@ -75,6 +96,12 @@ class ServiceSettings:
     github_client_secret: str | None = None
     public_url: str = "http://localhost:8000"
     sync_installations_on_startup: bool = False
+    cloud_model: str | None = None
+    cloud_price_in_per_m: float | None = None
+    cloud_price_out_per_m: float | None = None
+    repair_mechanism: str = "hybrid"
+    rag_embeddings: str = "auto"
+    health_max_files: int = 300
 
     @property
     def auth_enabled(self) -> bool:
@@ -94,7 +121,9 @@ class ServiceSettings:
             github_app_slug=_required("DOCDEBT_GITHUB_APP_SLUG"),
             github_private_key=private_key,
             github_webhook_secret=_required("DOCDEBT_GITHUB_WEBHOOK_SECRET"),
-            repair_model=os.environ.get("DOCDEBT_REPAIR_MODEL", "qwen2.5-coder:7b"),
+            repair_model=os.environ.get("DOCDEBT_LOCAL_MODEL")
+            or os.environ.get("DOCDEBT_REPAIR_MODEL")
+            or "qwen2.5-coder:7b",
             repair_pattern=os.environ.get("DOCDEBT_REPAIR_PATTERN", "zeroshot"),
             structural_only=os.environ.get("DOCDEBT_STRUCTURAL_ONLY", "true").lower() != "false",
             state_db_path=Path(os.environ.get("DOCDEBT_STATE_DB", ".docdebt-service/state.sqlite3")),
@@ -104,4 +133,10 @@ class ServiceSettings:
             github_client_secret=os.environ.get("DOCDEBT_GITHUB_CLIENT_SECRET") or None,
             public_url=(os.environ.get("DOCDEBT_PUBLIC_URL") or "http://localhost:8000").rstrip("/"),
             sync_installations_on_startup=os.environ.get("DOCDEBT_SYNC_ON_STARTUP", "true").lower() != "false",
+            cloud_model=os.environ.get("DOCDEBT_CLOUD_MODEL") or None,
+            cloud_price_in_per_m=_float_env("DOCDEBT_CLOUD_PRICE_IN_PER_M"),
+            cloud_price_out_per_m=_float_env("DOCDEBT_CLOUD_PRICE_OUT_PER_M"),
+            repair_mechanism=(os.environ.get("DOCDEBT_REPAIR_MECHANISM") or "hybrid").lower(),
+            rag_embeddings=(os.environ.get("DOCDEBT_RAG_EMBEDDINGS") or "auto").lower(),
+            health_max_files=int(os.environ.get("DOCDEBT_HEALTH_MAX_FILES") or 300),
         )

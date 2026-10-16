@@ -211,7 +211,7 @@ def test_decisions_need_no_dashboard_token_when_signed_in(client, settings, monk
     monkeypatch.setattr(
         app_module,
         "_decide_from_dashboard",
-        lambda *a: DecisionOutcome(DecisionStatus.REJECTED, "Repair for X.f rejected."),
+        lambda *a, **k: DecisionOutcome(DecisionStatus.REJECTED, "Repair for X.f rejected."),
     )
     sign_in(client)
     mine = proposal(settings, "acme", "demo")

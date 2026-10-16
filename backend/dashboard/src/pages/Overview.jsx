@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ProposalList, StateNote, repoPath } from "../components.jsx";
+import { PrecisionCard, ProposalList, StateNote, repoPath } from "../components.jsx";
 import { useApi, useDecision } from "../hooks.js";
 import UsageChart from "../UsageChart.jsx";
 
@@ -77,7 +77,7 @@ function RepoList({ repos }) {
 
 export default function Overview() {
   const { data, error, loading, refresh } = useApi(
-    ["/api/summary", "/api/repos", "/api/proposals?limit=10", "/api/usage?days=14", "/api/dashboard-config"],
+    ["/api/summary", "/api/repos", "/api/proposals?limit=10", "/api/usage?days=14", "/api/dashboard-config", "/api/precision?days=30"],
     { refreshMs: REFRESH_MS },
   );
   const decisions = useDecision(refresh);
@@ -85,7 +85,7 @@ export default function Overview() {
   return (
     <StateNote error={!data && error} loading={!data && loading}>
       {data && (() => {
-        const [summary, repos, proposals, usage, config] = data;
+        const [summary, repos, proposals, usage, config, precision] = data;
         return (
           <>
             <section className="intro">
@@ -114,6 +114,7 @@ export default function Overview() {
                 <ProposalList proposals={proposals} decisionsEnabled={config.decisions_enabled} decisions={decisions} />
               </div>
             </div>
+            <PrecisionCard precision={precision} />
             <UsageChart series={usage} />
           </>
         );

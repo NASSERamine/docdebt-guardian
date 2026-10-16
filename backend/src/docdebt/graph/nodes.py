@@ -6,7 +6,8 @@ partial state update. No business logic lives here — see ``docdebt.core.audito
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from langgraph.types import interrupt
 
@@ -22,11 +23,22 @@ from docdebt.repair.repairer import Repairer, RepairStatus
 class GraphDeps:
     """The components a compiled graph calls. Built once per graph, reused for
     every method it processes. ``router`` is ``None`` for a structural-only
-    graph (the Judge is never called)."""
+    graph (the Judge is never called).
+
+    ``repairers`` maps a model id to the repairer that uses it: a debt found
+    by a model of the cascade is repaired by that same model; ``repairer`` is
+    the default (the first model of the cascade). ``rag`` builds the
+    retrieved project context (``docdebt.rag.retriever.RagProvider``);
+    ``rag_repair`` / ``rag_detection`` say where it is given to the model.
+    """
 
     auditor: Auditor
     router: Router | None
     repairer: Repairer
+    repairers: dict[str, Any] = field(default_factory=dict)
+    rag: Any = None
+    rag_repair: bool = False
+    rag_detection: bool = False
 
 
 def content_fingerprint(unit) -> str:
@@ -66,7 +78,13 @@ def make_detect_node(deps: GraphDeps):
         unit = unit_from_dict(state["unit"])
         structural = [finding_from_dict(f) for f in state["structural_findings"]]
         routed = deps.router.route(unit, structural)
+        rag_context = (
+            [i.to_dict() for i in deps.rag.build(unit).items]
+            if deps.rag is not None and deps.rag_detection
+            else []
+        )
         return {
+            "rag_context": rag_context,
             "detection_status": routed.status.value,
             "detection_reason": routed.final.reason if routed.final else routed.note,
             "detection_model": routed.final.model_id if routed.final else None,
@@ -86,8 +104,18 @@ def has_debt(state: DocDebtState) -> bool:
 def make_repair_node(deps: GraphDeps):
     def repair(state: DocDebtState) -> dict:
         unit = unit_from_dict(state["unit"])
-        result = deps.repairer.repair(unit, _findings(state))
+        repairer = deps.repairers.get(state.get("detection_model") or "") or deps.repairer
+        context = None
+        rag_context = list(state.get("rag_context", []))
+        if deps.rag is not None and deps.rag_repair:
+            retrieved = deps.rag.build(unit)
+            context = retrieved.text or None
+            rag_context = [i.to_dict() for i in retrieved.items]
+        result = repairer.repair(unit, _findings(state), context=context)
         return {
+            "rag_context": rag_context,
+            "repair_mechanism": getattr(result, "mechanism", "regeneration"),
+            "field_log": list(getattr(result, "field_log", [])),
             "repair_status": result.status.value,
             "repair_reason": result.reason,
             "repair_model": result.model_id,

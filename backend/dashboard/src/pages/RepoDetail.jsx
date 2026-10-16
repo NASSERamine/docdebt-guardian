@@ -5,6 +5,7 @@ import { StatTiles, StateNote, SyncButton, formatDate, timeAgo } from "../compon
 import { useApi } from "../hooks.js";
 import UsageChart from "../UsageChart.jsx";
 import { ProposalHistory } from "./History.jsx";
+import RepoInsights from "./RepoInsights.jsx";
 
 function connectionLabel(detail) {
   if (detail.connected) return { cls: "connected", text: `connected${detail.connected_at ? ` since ${formatDate(detail.connected_at)}` : ""}` };
@@ -159,6 +160,7 @@ export default function RepoDetail() {
                 ]}
               />
               <UsageChart series={detail.usage} />
+              <RepoInsights owner={owner} repo={repo} connected={detail.connected} enabled={config.decisions_enabled} />
               <h2 className="section-title">Proposals</h2>
             </>
           );

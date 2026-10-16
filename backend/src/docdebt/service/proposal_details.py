@@ -12,6 +12,8 @@ from difflib import unified_diff
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from docdebt.llm.prompts.registry import SCREENED_ON
+
 
 def read_thread_values(checkpointer: BaseCheckpointSaver, thread_id: str) -> dict | None:
     """The latest saved state of a graph thread, without compiling the graph
@@ -75,6 +77,8 @@ def build_details(values: dict) -> dict:
             "status": values.get("detection_status"),
             "model": values.get("detection_model"),
             "confidence": values.get("detection_confidence"),
+            # A model reusing the prompts screened for a sibling model (e.g. gpt-5.6-luna -> gpt-5.6).
+            "screened_on": SCREENED_ON.get(values.get("detection_model") or ""),
         },
         "repair": {
             "status": values.get("repair_status"),
@@ -83,7 +87,12 @@ def build_details(values: dict) -> dict:
             "prompt_version": values.get("repair_prompt_version"),
             "repaired_doc": repaired,
             "changes": values.get("changes", []),
+            "mechanism": values.get("repair_mechanism") or "regeneration",
+            # Hybrid mechanism: what the post-validation did with each field the model answered.
+            "field_log": values.get("field_log", []),
         },
+        # The retrieved project context given to the model (RAG), excerpt by excerpt.
+        "rag_context": values.get("rag_context", []),
         "diff": diff[2:],  # without the "--- current" / "+++ proposed" header lines
         "final": values.get("final"),
     }

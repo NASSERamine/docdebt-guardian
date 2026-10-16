@@ -269,11 +269,12 @@ def test_a_review_uses_the_settings_saved_from_the_dashboard(settings, store, mo
 
     seen = {}
 
-    def fake_deps(docdebt_settings, *, mode, tracker):
-        seen.update(model=docdebt_settings.repair.model, pattern=docdebt_settings.repair.pattern, mode=mode)
+    def fake_deps(service_settings, runtime, policy, **kwargs):
+        mode = "structural" if runtime.structural_only else "pipeline"
+        seen.update(model=runtime.repair_model, pattern=runtime.repair_pattern, mode=mode)
         raise RuntimeError("stop after capturing the configuration")
 
-    monkeypatch.setattr(app_module, "build_graph_deps", fake_deps)
+    monkeypatch.setattr(app_module, "build_service_deps", fake_deps)
     store.save_settings({"repair_model": "deepseek-coder:6.7b-instruct", "repair_pattern": "cot"})
     store.save_settings({"structural_only": False})
     app_module._handle_pull_request(settings, store, pr_event())  # the error is logged, not raised

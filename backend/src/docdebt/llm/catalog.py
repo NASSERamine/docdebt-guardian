@@ -42,6 +42,17 @@ BUILTIN_MODELS: dict[str, ModelSpec] = {
         max_tokens={"default": 500, "cot": 600, "explain": 1500, "repair": 2500},
         max_tokens_cap=8192,
     ),
+    # GPT-5.6 Luna: same family and budgets as GPT-5.6 (hidden reasoning tokens
+    # count against the output limit). Prices are set by the service from
+    # DOCDEBT_CLOUD_PRICE_IN_PER_M / DOCDEBT_CLOUD_PRICE_OUT_PER_M.
+    "gpt-5.6-luna": ModelSpec(
+        id="gpt-5.6-luna",
+        provider="openai",
+        model="gpt-5.6-luna",
+        api_key_env="OPENAI_API_KEY",
+        max_tokens={"default": 500, "cot": 600, "explain": 1500, "repair": 2500},
+        max_tokens_cap=8192,
+    ),
 }
 
 

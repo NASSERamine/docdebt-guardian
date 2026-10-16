@@ -49,6 +49,8 @@ export default function HowItWorks() {
   const runtime = data?.[0]?.effective;
   const judgeOn = runtime ? !runtime.structural_only : null;
   const model = runtime?.repair_model ?? "the configured model";
+  const cloud = data?.[0]?.cloud?.known ? data[0].cloud.model : null;
+  const ragOn = runtime ? runtime.rag_repair || runtime.rag_detection : null;
 
   return (
     <>
@@ -105,6 +107,36 @@ export default function HowItWorks() {
 
         <Step
           n="2"
+          kind={KIND.exact}
+          title="Context — what does the project already say? (RAG)"
+          example={
+            <ul className="mini-findings">
+              <li>
+                <span className="badge source callees">called method</span> <code>Celsius.validate</code>: “rejects
+                values below absolute zero”
+              </li>
+              <li>
+                <span className="badge source similar">similar method</span> <code>Fahrenheit.toKelvin</code>, documented
+                in the project&apos;s style
+              </li>
+            </ul>
+          }
+          branch={
+            ragOn === null
+              ? "Configured in Settings and per repository."
+              : ragOn
+                ? "Currently ON. Each excerpt used is shown on the proposal page."
+                : "Currently OFF: switch it on in Settings."
+          }
+        >
+          DocDebt keeps a knowledge base per repository, built from the default branch: documented methods without debt,
+          tests, README sections, and every fix a reviewer accepted. For each method it retrieves the few relevant
+          excerpts (same file, called methods, most similar methods) and gives them to the model as reference only, so
+          the fix uses the project&apos;s own words. The same scan measures the repository&apos;s documentation health.
+        </Step>
+
+        <Step
+          n="3"
           kind={KIND.llm}
           title="Judge — does the description still match the code?"
           example={<span>“Converts celsius to kelvin” matches <code>tempInCelsius + 273.15</code>: no semantic debt.</span>}
@@ -112,7 +144,7 @@ export default function HowItWorks() {
             judgeOn === null
               ? "Can be switched on or off in Settings."
               : judgeOn
-                ? `Currently ON (${model}). A local model answers first; a stronger one is asked only when it is unsure, if allowed.`
+                ? `Currently ON (${model}). The local model answers first; ${cloud ? `${cloud} is asked only when it is unsure, on repositories that allow the cloud` : "no cloud model is configured"}.`
                 : "Currently OFF (structural checks only): switch it on in Settings."
           }
         >
@@ -122,23 +154,25 @@ export default function HowItWorks() {
         </Step>
 
         <Step
-          n="3"
+          n="4"
           kind={KIND.llm}
-          title="Repairer — write the fix"
+          title="Repairer — hybrid replacement"
           example={
             <pre className="code-block small diff">
               <div className="diff-line del">- * @param tempInFahrenheit temperature in celsius</div>
               <div className="diff-line add">+ * @param tempInCelsius temperature in celsius</div>
             </pre>
           }
-          branch="No debt at steps 1–2? The method is clean: nothing is posted."
+          branch="No debt at steps 1 and 3? The method is clean: nothing is posted."
         >
-          {model} rewrites the Javadoc. DocDebt then keeps <em>only</em> the fields that had to change and copies every
-          other line from the original, byte for byte, so the proposed diff stays as small as possible.
+          A deterministic plan handles the structure first (a renamed parameter keeps its description, a phantom tag is
+          deleted). {model} then only writes the missing fields and judges the disputed ones, in a small JSON answer.
+          A post-validation reverts invented identifiers and cosmetic edits, and every untouched line is copied from the
+          original byte for byte, so the proposed diff stays as small as possible.
         </Step>
 
         <Step
-          n="4"
+          n="5"
           kind={KIND.check}
           title="Verifier — check the fix before anyone sees it"
           example={<span>No structural error left, the other four lines unchanged: verified in 1 attempt.</span>}
@@ -149,7 +183,7 @@ export default function HowItWorks() {
         </Step>
 
         <Step
-          n="5"
+          n="6"
           kind={KIND.human}
           title="Human review — accept or reject"
           example={
@@ -160,7 +194,10 @@ export default function HowItWorks() {
         >
           The proposal appears as a comment on the pull request and in this dashboard, with the debt and the diff. A
           person accepts it (DocDebt commits the fix to the PR branch) or rejects it (nothing changes). A decision is
-          remembered: the same proposal is not posted twice.
+          remembered: the same proposal is not posted twice. A <strong>DocDebt Guardian</strong> check run sums it up on the
+          commit and can block the merge while structural debt is pending. Every decision is also a label: rejections
+          say why, the dashboard shows the observed precision and suggests a confidence threshold, and accepted fixes
+          become examples in the knowledge base.
         </Step>
       </ol>
 

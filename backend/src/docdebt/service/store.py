@@ -106,6 +106,41 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at  REAL NOT NULL
 );
 
+-- Per-repository policy, edited on the repository's page.
+CREATE TABLE IF NOT EXISTS repo_settings (
+    owner                 TEXT NOT NULL,
+    repo                  TEXT NOT NULL,
+    allow_cloud           INTEGER NOT NULL DEFAULT 0,  -- may send code to the cloud model
+    block_on_structural   INTEGER NOT NULL DEFAULT 0,  -- the check run fails on pending structural debt
+    rag_enabled           INTEGER NOT NULL DEFAULT 1,
+    confidence_threshold  REAL,                        -- NULL: the global setting
+    updated_at            REAL NOT NULL,
+    PRIMARY KEY (owner, repo)
+);
+
+-- One "documentation health" scan of a repository's default branch.
+CREATE TABLE IF NOT EXISTS debt_snapshots (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner             TEXT NOT NULL,
+    repo              TEXT NOT NULL,
+    status            TEXT NOT NULL,   -- "running" | "done" | "failed"
+    branch            TEXT,
+    commit_sha        TEXT,
+    started_at        REAL NOT NULL,
+    finished_at       REAL,
+    files             INTEGER NOT NULL DEFAULT 0,
+    methods           INTEGER NOT NULL DEFAULT 0,  -- public and protected methods
+    documented        INTEGER NOT NULL DEFAULT 0,
+    debt_methods      INTEGER NOT NULL DEFAULT 0,  -- documented, with structural debt
+    warnings          INTEGER NOT NULL DEFAULT 0,
+    score             REAL,                        -- documented without debt / methods
+    truncated         INTEGER NOT NULL DEFAULT 0,  -- more files than the scan limit
+    packages          TEXT NOT NULL DEFAULT '[]',  -- JSON
+    worst_files       TEXT NOT NULL DEFAULT '[]',  -- JSON
+    error             TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_debt_snapshots_repo ON debt_snapshots (owner, repo, started_at);
+
 CREATE TABLE IF NOT EXISTS installations (
     owner            TEXT NOT NULL,
     repo             TEXT NOT NULL,
@@ -128,6 +163,28 @@ def _visible_clause(visible: Iterable[str] | None, alias: str = "") -> tuple[str
         return "0", []
     return f"({alias}owner || '/' || {alias}repo) IN ({', '.join('?' * len(names))})", names
 
+
+# Recorded with every proposal, for "learning from decisions": what was found,
+# by which model, how confident it was, which mechanism repaired it, and why
+# a reviewer rejected it.
+_PROPOSAL_METADATA = (
+    ("debt_kind", "TEXT"),  # "structural" | "semantic" | "both"
+    ("rules", "TEXT"),  # comma-separated rule ids
+    ("confidence", "REAL"),  # the Judge's confidence (semantic debt only)
+    ("detection_model", "TEXT"),
+    ("repair_model", "TEXT"),
+    ("repair_mechanism", "TEXT"),
+    ("line", "INTEGER"),  # first line of the Javadoc in the file
+    ("reject_reason", "TEXT"),
+    ("decided_at", "REAL"),
+)
+REJECT_REASONS = ("false_positive", "incorrect_fix", "manual", "other")
+_REPO_DEFAULTS = {
+    "allow_cloud": False,
+    "block_on_structural": False,
+    "rag_enabled": True,
+    "confidence_threshold": None,
+}
 
 _STATUS_CLAUSES = {
     "pending": "resolved = 0",
@@ -152,6 +209,15 @@ class ReviewRequest:
     decision: str | None
     created_at: float
     installation_id: str | None = None
+    debt_kind: str | None = None
+    rules: str | None = None
+    confidence: float | None = None
+    detection_model: str | None = None
+    repair_model: str | None = None
+    repair_mechanism: str | None = None
+    line: int | None = None
+    reject_reason: str | None = None
+    decided_at: float | None = None
 
 
 class ReviewStore:
@@ -178,6 +244,9 @@ class ReviewStore:
             conn.execute("ALTER TABLE review_requests ADD COLUMN decision TEXT")
         if "installation_id" not in columns:
             conn.execute("ALTER TABLE review_requests ADD COLUMN installation_id TEXT")
+        for name, sql_type in _PROPOSAL_METADATA:
+            if name not in columns:
+                conn.execute(f"ALTER TABLE review_requests ADD COLUMN {name} {sql_type}")
         scan_columns = {row["name"] for row in conn.execute("PRAGMA table_info(scans)")}
         if "already_decided" not in scan_columns:
             conn.execute("ALTER TABLE scans ADD COLUMN already_decided INTEGER NOT NULL DEFAULT 0")
@@ -203,6 +272,7 @@ class ReviewStore:
         method_label: str,
         head_sha: str,
         installation_id: str | None = None,
+        metadata: dict | None = None,
     ) -> str:
         """Register a pending review request and return its short id.
 
@@ -229,6 +299,12 @@ class ReviewStore:
                     time.time(),
                 ),
             )
+            meta = {k: v for k, v in (metadata or {}).items() if k in dict(_PROPOSAL_METADATA)}
+            if meta:
+                conn.execute(
+                    f"UPDATE review_requests SET {', '.join(f'{k} = ?' for k in meta)} WHERE short_id = ?",
+                    (*meta.values(), short_id),
+                )
         return short_id
 
     def get(self, short_id: str) -> ReviewRequest | None:
@@ -236,10 +312,14 @@ class ReviewStore:
             row = conn.execute("SELECT * FROM review_requests WHERE short_id = ?", (short_id,)).fetchone()
         return self._to_request(row) if row else None
 
-    def mark_resolved(self, short_id: str, decision: str) -> None:
+    def mark_resolved(self, short_id: str, decision: str, reason: str | None = None) -> None:
+        if reason is not None and reason not in REJECT_REASONS:
+            raise ValueError(f"Unknown reject reason {reason!r}. Valid: {REJECT_REASONS}.")
         with self._connect() as conn:
             conn.execute(
-                "UPDATE review_requests SET resolved = 1, decision = ? WHERE short_id = ?", (decision, short_id)
+                "UPDATE review_requests SET resolved = 1, decision = ?, reject_reason = ?, decided_at = ? "
+                "WHERE short_id = ?",
+                (decision, reason if decision == "reject" else None, time.time(), short_id),
             )
 
     def pending_for_thread(self, thread_id: str) -> ReviewRequest | None:
@@ -710,6 +790,137 @@ class ReviewStore:
             series.append({"date": day.isoformat(), "calls": calls or 0, "cost_usd": round(cost or 0.0, 4)})
         return series
 
+    # -- per-repository policy ----------------------------------------------------
+
+    def repo_settings(self, owner: str, repo: str) -> dict:
+        """The policy of ``owner/repo``; defaults for a repository never configured."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM repo_settings WHERE owner = ? AND repo = ?", (owner, repo)
+            ).fetchone()
+        if row is None:
+            return dict(_REPO_DEFAULTS, updated_at=None)
+        return {
+            "allow_cloud": bool(row["allow_cloud"]),
+            "block_on_structural": bool(row["block_on_structural"]),
+            "rag_enabled": bool(row["rag_enabled"]),
+            "confidence_threshold": row["confidence_threshold"],
+            "updated_at": row["updated_at"],
+        }
+
+    def save_repo_settings(self, owner: str, repo: str, values: dict) -> dict:
+        current = self.repo_settings(owner, repo)
+        merged = {k: values.get(k, current[k]) for k in _REPO_DEFAULTS}
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO repo_settings (owner, repo, allow_cloud, block_on_structural, rag_enabled, "
+                "confidence_threshold, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(owner, repo) DO UPDATE SET allow_cloud = excluded.allow_cloud, "
+                "block_on_structural = excluded.block_on_structural, rag_enabled = excluded.rag_enabled, "
+                "confidence_threshold = excluded.confidence_threshold, updated_at = excluded.updated_at",
+                (
+                    owner,
+                    repo,
+                    int(bool(merged["allow_cloud"])),
+                    int(bool(merged["block_on_structural"])),
+                    int(bool(merged["rag_enabled"])),
+                    merged["confidence_threshold"],
+                    time.time(),
+                ),
+            )
+        return self.repo_settings(owner, repo)
+
+    # -- learning from decisions ------------------------------------------------------
+
+    def decided_proposals(
+        self,
+        *,
+        owner: str | None = None,
+        repo: str | None = None,
+        since: float | None = None,
+        visible: Iterable[str] | None = None,
+    ) -> list[ReviewRequest]:
+        """Accepted and rejected proposals (expired ones are no one's decision)."""
+        clauses = ["decision IN ('accept', 'reject')"]
+        params: list[object] = []
+        visible_where, visible_params = _visible_clause(visible)
+        if visible_where:
+            clauses.append(visible_where)
+            params.extend(visible_params)
+        if owner is not None and repo is not None:
+            clauses.append("owner = ? AND repo = ?")
+            params.extend([owner, repo])
+        if since is not None:
+            clauses.append("COALESCE(decided_at, created_at) >= ?")
+            params.append(since)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM review_requests WHERE {' AND '.join(clauses)} ORDER BY created_at", params
+            ).fetchall()
+        return [self._to_request(row) for row in rows]
+
+    # -- documentation health snapshots -------------------------------------------------
+
+    def start_health_scan(self, owner: str, repo: str) -> int | None:
+        """A new running health scan, or ``None`` if one is already running."""
+        with self._connect() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            running = conn.execute(
+                "SELECT 1 FROM debt_snapshots WHERE owner = ? AND repo = ? AND status = 'running'", (owner, repo)
+            ).fetchone()
+            if running:
+                return None
+            cursor = conn.execute(
+                "INSERT INTO debt_snapshots (owner, repo, status, started_at) VALUES (?, ?, 'running', ?)",
+                (owner, repo, time.time()),
+            )
+            return int(cursor.lastrowid)
+
+    def finish_health_scan(self, snapshot_id: int, *, error: str | None = None, **values: object) -> None:
+        allowed = {
+            "branch", "commit_sha", "files", "methods", "documented", "debt_methods", "warnings", "score",
+            "truncated", "packages", "worst_files",
+        }  # fmt: skip
+        if set(values) - allowed:
+            raise ValueError(f"Unknown snapshot values: {sorted(set(values) - allowed)}")
+        values = {k: (json.dumps(v) if k in ("packages", "worst_files") else v) for k, v in values.items()}
+        assignments = "".join(f", {key} = ?" for key in values)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE debt_snapshots SET status = ?, finished_at = ?, error = ?{assignments} WHERE id = ?",
+                ("failed" if error else "done", time.time(), error, *values.values(), snapshot_id),
+            )
+
+    @staticmethod
+    def _snapshot(row: sqlite3.Row) -> dict:
+        snap = dict(row)
+        snap["packages"] = json.loads(snap["packages"] or "[]")
+        snap["worst_files"] = json.loads(snap["worst_files"] or "[]")
+        snap["truncated"] = bool(snap["truncated"])
+        return snap
+
+    def get_health_scan(self, snapshot_id: int) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM debt_snapshots WHERE id = ?", (snapshot_id,)).fetchone()
+        return self._snapshot(row) if row else None
+
+    def health_history(self, owner: str, repo: str, limit: int = 30) -> list[dict]:
+        """Health snapshots of ``owner/repo``, newest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM debt_snapshots WHERE owner = ? AND repo = ? ORDER BY started_at DESC, id DESC "
+                "LIMIT ?",
+                (owner, repo, limit),
+            ).fetchall()
+        return [self._snapshot(row) for row in rows]
+
+    def fail_running_health_scans(self, reason: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE debt_snapshots SET status = 'failed', finished_at = ?, error = ? WHERE status = 'running'",
+                (time.time(), reason),
+            )
+
     @staticmethod
     def _to_request(row: sqlite3.Row) -> ReviewRequest:
         return ReviewRequest(
@@ -725,4 +936,5 @@ class ReviewStore:
             decision=row["decision"],
             created_at=row["created_at"],
             installation_id=row["installation_id"],
+            **{name: row[name] for name, _ in _PROPOSAL_METADATA},
         )

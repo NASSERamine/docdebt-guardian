@@ -39,6 +39,12 @@ LOCKED_DETECTION_WORDINGS: dict[str, dict[str, int]] = {
     "claude-sonnet-5": {"zeroshot": 0, "persona": 0, "oneshot": 1, "threeshot": 1, "cot": 2},
 }
 
+# Models that reuse the wordings screened for a sibling model of the same
+# family, without their own screening. Their verdicts say so (``screened_on``).
+SCREENED_ON: dict[str, str] = {"gpt-5.6-luna": "gpt-5.6"}
+for _model, _sibling in SCREENED_ON.items():
+    LOCKED_DETECTION_WORDINGS.setdefault(_model, dict(LOCKED_DETECTION_WORDINGS[_sibling]))
+
 # (model, pattern) pairs whose every screened wording collapsed to a constant
 # answer, or that collapsed at full run. Using them triggers a warning.
 COLLAPSED: frozenset[tuple[str, str]] = frozenset(

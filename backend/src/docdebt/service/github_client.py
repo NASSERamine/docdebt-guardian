@@ -210,3 +210,42 @@ class GithubClient:
                 f"/repos/{owner}/{repo}/issues/comments/{comment_id}/reactions",
                 json={"content": content},
             )
+
+    # -- whole repository (documentation health scan) -------------------------
+
+    def get_repository(self, owner: str, repo: str) -> dict:
+        return self._request("GET", f"/repos/{owner}/{repo}").json()
+
+    def get_branch_head(self, owner: str, repo: str, branch: str) -> str:
+        """The commit sha at the tip of ``branch``."""
+        return self._request("GET", f"/repos/{owner}/{repo}/commits/{branch}").json()["sha"]
+
+    def list_tree_paths(self, owner: str, repo: str, sha: str) -> tuple[list[str], bool]:
+        """Every file path of the tree at ``sha`` and whether GitHub truncated
+        the listing (very large repositories)."""
+        body = self._request("GET", f"/repos/{owner}/{repo}/git/trees/{sha}", params={"recursive": "1"}).json()
+        paths = [entry["path"] for entry in body.get("tree", []) if entry.get("type") == "blob"]
+        return paths, bool(body.get("truncated"))
+
+    # -- check runs (the PR's "Checks" tab) -------------------------------------
+
+    def find_check_run(self, owner: str, repo: str, head_sha: str, name: str) -> dict | None:
+        """The latest check run called ``name`` on ``head_sha``, if any."""
+        body = self._request(
+            "GET", f"/repos/{owner}/{repo}/commits/{head_sha}/check-runs", params={"check_name": name}
+        ).json()
+        runs = body.get("check_runs", [])
+        return runs[0] if runs else None
+
+    def upsert_check_run(self, owner: str, repo: str, head_sha: str, name: str, **fields: Any) -> dict:
+        """Create the check run ``name`` on ``head_sha``, or update the existing one.
+
+        ``fields`` are the REST API fields: ``status``, ``conclusion``,
+        ``output`` ({title, summary, text, annotations}), ``details_url``.
+        """
+        existing = self.find_check_run(owner, repo, head_sha, name)
+        if existing is None:
+            return self._request(
+                "POST", f"/repos/{owner}/{repo}/check-runs", json={"name": name, "head_sha": head_sha, **fields}
+            ).json()
+        return self._request("PATCH", f"/repos/{owner}/{repo}/check-runs/{existing['id']}", json=fields).json()
