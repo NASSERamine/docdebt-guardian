@@ -45,20 +45,17 @@ const KIND = {
 };
 
 export default function HowItWorks() {
-  const { data } = useApi(["/api/settings"]);
-  const runtime = data?.[0]?.effective;
-  const judgeOn = runtime ? !runtime.structural_only : null;
-  const model = runtime?.repair_model ?? "the configured model";
-  const cloud = data?.[0]?.cloud?.known ? data[0].cloud.model : null;
-  const ragOn = runtime ? runtime.rag_repair || runtime.rag_detection : null;
+  const { data } = useApi(["/api/status"]);
+  const status = data?.[0];
+  const model = status?.signed_in && status.model.configured ? status.model.model : "the model chosen on the Model page";
 
   return (
     <>
       <h1 className="page-title">How it works</h1>
       <p className="lead">
-        Every method touched by a pull request goes through the same pipeline. Exact rules run first, the AI model only
-        writes and judges where rules cannot, and every AI answer is checked before anyone sees it. Nothing reaches the
-        code until a person accepts it.
+        Every method touched by a pull request goes through the same fixed pipeline: same input, same answer. Exact
+        rules and the AI model both look at the whole Javadoc, the project context is always retrieved, every AI answer
+        is checked before anyone sees it, and nothing reaches the code until a person accepts it.
       </p>
 
       <section className="problem">
@@ -108,67 +105,61 @@ export default function HowItWorks() {
         <Step
           n="2"
           kind={KIND.exact}
-          title="Context — what does the project already say? (RAG)"
+          title="Context — what does the project already say? (RAG, always on)"
           example={
             <ul className="mini-findings">
               <li>
-                <span className="badge source callees">called method</span> <code>Celsius.validate</code>: “rejects
-                values below absolute zero”
+                <span className="badge source siblings">same file</span> <code>Celsius.toFahrenheit</code>, documented
+                next to it
               </li>
               <li>
-                <span className="badge source similar">similar method</span> <code>Fahrenheit.toKelvin</code>, documented
-                in the project&apos;s style
+                <span className="badge source similar">similar method</span> <code>Fahrenheit.toKelvin</code>, found by
+                the hybrid search
               </li>
             </ul>
           }
-          branch={
-            ragOn === null
-              ? "Configured in Settings and per repository."
-              : ragOn
-                ? "Currently ON. Each excerpt used is shown on the proposal page."
-                : "Currently OFF: switch it on in Settings."
-          }
+          branch="Each excerpt given to the model is shown on the proposal page, with its rank."
         >
-          DocDebt keeps a knowledge base per repository, built from the default branch: documented methods without debt,
-          tests, README sections, and every fix a reviewer accepted. For each method it retrieves the few relevant
-          excerpts (same file, called methods, most similar methods) and gives them to the model as reference only, so
-          the fix uses the project&apos;s own words. The same scan measures the repository&apos;s documentation health.
+          First, up to three documented methods of the same file (the context that helped most in the research). Then
+          the four best excerpts of the repository&apos;s knowledge base — debt-free documented methods, tests, README
+          sections and accepted fixes — found by a hybrid search: BM25 keywords and all-MiniLM-L6-v2 vectors (run
+          locally, stored in Chroma) fused by rank. No similarity threshold, fixed sizes, and never a method with the
+          same name: the answer cannot leak in.
         </Step>
 
         <Step
           n="3"
           kind={KIND.llm}
-          title="Judge — does the description still match the code?"
-          example={<span>“Converts celsius to kelvin” matches <code>tempInCelsius + 273.15</code>: no semantic debt.</span>}
-          branch={
-            judgeOn === null
-              ? "Can be switched on or off in Settings."
-              : judgeOn
-                ? `Currently ON (${model}). The local model answers first; ${cloud ? `${cloud} is asked only when it is unsure, on repositories that allow the cloud` : "no cloud model is configured"}.`
-                : "Currently OFF (structural checks only): switch it on in Settings."
+          title="Detection — one verdict on the whole Javadoc"
+          example={
+            <span>
+              Rules: two errors. Model: “debt — the @param names a parameter the method does not have”. Verdict: debt.
+            </span>
           }
+          branch={`Debt when an exact rule fails OR ${model} says so — one call, temperature 0, no threshold.`}
         >
-          Rules cannot read sentences. The AI model votes “debt” or “clean” and must quote the exact sentence that is
-          wrong and the code that contradicts it. Both quotes are checked word for word against the real file: an
-          invented quote is thrown away, so the model can miss an alert but never invent one.
+          The exact rules of step 1 and the AI model judge the same thing: is this Javadoc still true for this code? The
+          model answers “debt” or “clean” with the research&apos;s fixed prompt, then explains what is wrong; the
+          sentences and code it quotes are highlighted when they are found word for word in the method. It is a
+          proposal, never an automatic change: the person decides.
         </Step>
 
         <Step
           n="4"
           kind={KIND.llm}
-          title="Repairer — hybrid replacement"
+          title="Fix — field-by-field replacement"
           example={
             <pre className="code-block small diff">
               <div className="diff-line del">- * @param tempInFahrenheit temperature in celsius</div>
               <div className="diff-line add">+ * @param tempInCelsius temperature in celsius</div>
             </pre>
           }
-          branch="No debt at steps 1 and 3? The method is clean: nothing is posted."
+          branch="No debt at steps 1 and 3? The method is clean: nothing is posted. Want another version? “Regenerate” asks the model for a full rewrite to compare."
         >
           A deterministic plan handles the structure first (a renamed parameter keeps its description, a phantom tag is
-          deleted). {model} then only writes the missing fields and judges the disputed ones, in a small JSON answer.
-          A post-validation reverts invented identifiers and cosmetic edits, and every untouched line is copied from the
-          original byte for byte, so the proposed diff stays as small as possible.
+          deleted). The model then only writes the missing fields and judges the disputed ones. A post-validation
+          reverts invented identifiers and cosmetic edits, and every untouched line is copied byte for byte, so the
+          diff stays as small as possible. A full regeneration is computed only when the reviewer asks for it.
         </Step>
 
         <Step
@@ -185,19 +176,19 @@ export default function HowItWorks() {
         <Step
           n="6"
           kind={KIND.human}
-          title="Human review — accept or reject"
+          title="Human review — accept, edit, regenerate or reject"
           example={
             <span>
               Accept → commit <code>docdebt: fix documentation for Celsius.toKelvin</code> on the PR branch.
             </span>
           }
         >
-          The proposal appears as a comment on the pull request and in this dashboard, with the debt and the diff. A
-          person accepts it (DocDebt commits the fix to the PR branch) or rejects it (nothing changes). A decision is
-          remembered: the same proposal is not posted twice. A <strong>DocDebt Guardian</strong> check run sums it up on the
-          commit and can block the merge while structural debt is pending. Every decision is also a label: rejections
-          say why, the dashboard shows the observed precision and suggests a confidence threshold, and accepted fixes
-          become examples in the knowledge base.
+          The proposal appears as a comment on the pull request and in this application, with the explanation and the
+          three versions side by side (current, field-by-field fix, regeneration). A person accepts one of them, edits
+          the fix before accepting (the edit is checked by the exact rules), or rejects with a reason (nothing
+          changes). A <strong>DocDebt Guardian</strong> check run sums it up on the commit and can block the merge while
+          a proposal is pending. Every decision feeds the observed precision, and accepted fixes become examples in the
+          knowledge base.
         </Step>
       </ol>
 
@@ -213,8 +204,8 @@ export default function HowItWorks() {
             <p className="field-help">Exact checks decide first; the model only adds what rules cannot see.</p>
           </div>
           <div className="tile">
-            <div className="guarantee-title">No invented alerts</div>
-            <p className="field-help">A semantic alert needs two quotes found word for word in the real code.</p>
+            <div className="guarantee-title">Deterministic</div>
+            <p className="field-help">One model, fixed prompts, temperature 0, fixed context sizes, no threshold.</p>
           </div>
           <div className="tile">
             <div className="guarantee-title">Minimal, verified diffs</div>
@@ -224,7 +215,8 @@ export default function HowItWorks() {
       </section>
 
       <p className="field-help how-next">
-        See it on real data: <Link to="/proposals">History</Link> → <strong>Review</strong> on any proposal.
+        See it on real data: <Link to="/review">To review</Link>, or <Link to="/proposals">History</Link> →{" "}
+        <strong>Review</strong> on any proposal.
       </p>
     </>
   );

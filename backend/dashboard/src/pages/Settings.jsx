@@ -1,51 +1,33 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { errorText, sendWithToken } from "../api.js";
-import { ConnectButton, StateNote, SyncButton, formatDate, repoPath } from "../components.jsx";
+import { ConnectButton, ErrorNote, StateNote, SyncButton, formatDate, repoPath } from "../components.jsx";
 import { useApi } from "../hooks.js";
-
-const PATTERN_LABELS = { zeroshot: "zero-shot", cot: "chain of thought" };
-
-const MECHANISM_HELP = {
-  hybrid:
-    "Hybrid replacement (recommended): a deterministic plan fixes the structure (renames, deletions), the model only writes or judges the fields it is asked about, and a post-validation reverts invented identifiers and cosmetic edits. Untouched lines stay byte-identical.",
-  regeneration:
-    "Regeneration: the model rewrites the whole Javadoc with the screened repair prompt, then the Verifier checks it. Only for models with a screened prompt; others always use the hybrid mechanism.",
-};
-
-const RAG_SOURCES = {
-  siblings: ["Same file", "documented methods of the file under review"],
-  callees: ["Called methods", "the documentation of the methods it calls"],
-  similar: ["Similar methods", "the closest documented methods of the whole project"],
-  validated: ["Accepted fixes", "Javadocs reviewers accepted from DocDebt"],
-  tests: ["Tests", "test methods that call it"],
-  readme: ["README", "the most relevant README section"],
-};
-
-function CloudInfo({ cloud }) {
-  if (!cloud.model) {
-    return <p className="field-help">No cloud model configured (DOCDEBT_CLOUD_MODEL): every review stays local.</p>;
-  }
-  const problems = [];
-  if (!cloud.known) problems.push("unknown model id");
-  if (!cloud.api_key_set) problems.push("OPENAI_API_KEY is not set");
-  return (
-    <p className="field-help">
-      Cloud model: <span className="badge model">{cloud.model}</span> —{" "}
-      {cloud.price_in_per_m != null || cloud.price_out_per_m != null
-        ? `$${cloud.price_in_per_m ?? "?"}/M input tokens, $${cloud.price_out_per_m ?? "?"}/M output tokens.`
-        : "catalog prices (set DOCDEBT_CLOUD_PRICE_IN_PER_M / _OUT_PER_M to override)."}{" "}
-      Used only on repositories whose policy allows it, after the local model,
-      and within the cost cap.
-      {problems.length > 0 && <span className="feed-result error"> Not usable: {problems.join(", ")}.</span>}
-    </p>
-  );
-}
 
 function DefaultHint({ name, settings, format = (v) => String(v) }) {
   const overridden = settings.overridden.includes(name) && settings.effective[name] !== settings.defaults[name];
-  if (!overridden) return <span className="field-hint">default from the environment</span>;
-  return <span className="field-hint changed">changed here · environment default: {format(settings.defaults[name])}</span>;
+  if (!overridden) return <span className="field-hint">default</span>;
+  return <span className="field-hint changed">changed here · default: {format(settings.defaults[name])}</span>;
+}
+
+// What is fixed, for determinism, and what remains a setting (the cost cap).
+function FixedChoices({ settings }) {
+  return (
+    <div className="field">
+      <span className="field-label">How every pull request is analysed (fixed)</span>
+      <ul className="plain-list">
+        <li>
+          The model chosen on the <Link to="/model">Model page</Link>, at temperature 0, with its fixed prompt.
+        </li>
+        <li>One detection on the whole Javadoc: debt when an exact rule fails or the model says so. No threshold.</li>
+        <li>
+          Project context always retrieved: documented methods of the same file, then hybrid search in the knowledge
+          base ({settings.rag_embeddings === "bm25" ? "BM25 only" : "BM25 + all-MiniLM-L6-v2 vectors"}, fused by rank).
+        </li>
+        <li>The field-by-field fix is proposed; a full regeneration is computed only when you ask for it.</li>
+      </ul>
+    </div>
+  );
 }
 
 function SettingsForm({ settings, onSaved }) {
@@ -86,152 +68,18 @@ function SettingsForm({ settings, onSaved }) {
     >
       {!settings.editable && (
         <p className="notice">
-          Read-only: set <span className="mono">DOCDEBT_DASHBOARD_TOKEN</span> in <span className="mono">.env</span> and
-          restart the service to change settings from here.
+          Read-only: sign in with GitHub, or set <span className="mono">DOCDEBT_DASHBOARD_TOKEN</span> in{" "}
+          <span className="mono">.env</span>, to change settings from here.
         </p>
       )}
+      <FixedChoices settings={settings} />
       <fieldset disabled={!settings.editable || saving}>
-        <div className="field">
-          <label htmlFor="model">Model</label>
-          <select id="model" className="filter-input" value={form.repair_model} onChange={(e) => set("repair_model", e.target.value)}>
-            {[...new Set([...settings.choices.models, form.repair_model])].map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <DefaultHint name="repair_model" settings={settings} />
-          <p className="field-help">
-            Local model: writes the repairs and, when semantic detection is on, judges the documentation. Must be
-            available in Ollama.
-          </p>
-          <CloudInfo cloud={settings.cloud} />
-        </div>
-
-        <div className="field">
-          <label htmlFor="mechanism">Repair mechanism</label>
-          <select
-            id="mechanism"
-            className="filter-input"
-            value={form.repair_mechanism}
-            onChange={(e) => set("repair_mechanism", e.target.value)}
-          >
-            {settings.choices.mechanisms.map((m) => (
-              <option key={m} value={m}>
-                {m}
-              </option>
-            ))}
-          </select>
-          <DefaultHint name="repair_mechanism" settings={settings} />
-          <p className="field-help">{MECHANISM_HELP[form.repair_mechanism]}</p>
-        </div>
-
-        <div className="field">
-          <label htmlFor="pattern">Repair prompt</label>
-          <select id="pattern" className="filter-input" value={form.repair_pattern} onChange={(e) => set("repair_pattern", e.target.value)}>
-            {[...new Set([...settings.choices.patterns, form.repair_pattern])].map((p) => (
-              <option key={p} value={p}>
-                {PATTERN_LABELS[p] || p}
-              </option>
-            ))}
-          </select>
-          <DefaultHint name="repair_pattern" settings={settings} format={(v) => PATTERN_LABELS[v] || v} />
-        </div>
-
-        <div className="field">
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={!form.structural_only}
-              onChange={(e) => set("structural_only", !e.target.checked)}
-            />
-            Semantic detection (LLM Judge)
-          </label>
-          <DefaultHint name="structural_only" settings={settings} format={(v) => (v ? "off" : "on")} />
-          <p className="field-help">
-            Off: only exact structural checks (@param, @return, @throws). On: the model also looks for descriptions that
-            contradict the code — slower, and it costs LLM calls.
-          </p>
-        </div>
-
-        <div className="field">
-          <label htmlFor="threshold">Confidence threshold: {Number(form.confidence_threshold).toFixed(2)}</label>
-          <input
-            id="threshold"
-            type="range"
-            min="0"
-            max="1"
-            step="0.05"
-            value={form.confidence_threshold}
-            onChange={(e) => set("confidence_threshold", Number(e.target.value))}
-            disabled={form.structural_only}
-          />
-          <DefaultHint name="confidence_threshold" settings={settings} />
-          <p className="field-help">
-            Below this share of agreeing votes the Judge abstains instead of reporting semantic debt.
-            {form.structural_only && " Only used when semantic detection is on."}
-          </p>
-        </div>
-
-        <div className="field">
-          <span className="field-label">Project context (RAG)</span>
-          <label className="checkbox">
-            <input type="checkbox" checked={form.rag_repair} onChange={(e) => set("rag_repair", e.target.checked)} />
-            Give the context to the repair
-          </label>
-          <label className="checkbox">
-            <input
-              type="checkbox"
-              checked={form.rag_detection}
-              onChange={(e) => set("rag_detection", e.target.checked)}
-              disabled={form.structural_only}
-            />
-            Give the context to the semantic detection
-          </label>
-          <div className="source-grid">
-            {settings.choices.rag_sources.map((key) => {
-              const [label, help] = RAG_SOURCES[key] || [key, ""];
-              const on = form.rag_sources.includes(key);
-              return (
-                <label className="checkbox" key={key} title={help}>
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    onChange={(e) =>
-                      set(
-                        "rag_sources",
-                        settings.choices.rag_sources.filter((k) => (k === key ? e.target.checked : form.rag_sources.includes(k))),
-                      )
-                    }
-                  />
-                  {label}
-                </label>
-              );
-            })}
-          </div>
-          <label htmlFor="topk">Similar methods per prompt: {form.rag_top_k}</label>
-          <input
-            id="topk"
-            type="range"
-            min="1"
-            max="5"
-            step="1"
-            value={form.rag_top_k}
-            onChange={(e) => set("rag_top_k", Number(e.target.value))}
-          />
-          <p className="field-help">
-            Excerpts of the repository retrieved for each method (ranking: {settings.rag_embeddings === "bm25" ? "BM25" : `${settings.rag_embeddings} embeddings, BM25 as fallback`})
-            and given to the model as reference only. Each repository can turn it off in its policy. Detection prompts
-            were screened without context: adding it to detection is experimental.
-          </p>
-        </div>
-
         <div className="field">
           <label className="checkbox">
             <input
               type="checkbox"
               checked={capOn}
-              onChange={(e) => set("max_total_cost_usd", e.target.checked ? settings.defaults.max_total_cost_usd ?? 5 : null)}
+              onChange={(e) => set("max_total_cost_usd", e.target.checked ? 5 : null)}
             />
             Cost cap
           </label>
@@ -251,8 +99,9 @@ function SettingsForm({ settings, onSaved }) {
           )}
           <DefaultHint name="max_total_cost_usd" settings={settings} format={(v) => (v === null ? "no cap" : `$${v}`)} />
           <p className="field-help">
-            ${settings.spent_usd.toFixed(4)} spent so far, all repositories. Once the cap is reached, new pushes are not
-            reviewed and the PR gets a note saying why. Local Ollama models cost nothing.
+            ${settings.spent_usd.toFixed(4)} spent so far, all repositories (with the prices given on the Model page).
+            Once the cap is reached, new pushes are not reviewed and the PR gets a note saying why. A budget, not a
+            decision threshold: off by default.
           </p>
         </div>
 
@@ -264,12 +113,12 @@ function SettingsForm({ settings, onSaved }) {
             <button
               type="button"
               className="page-btn"
-              onClick={() => window.confirm("Forget every change made here and use the environment defaults?") && send("DELETE", undefined, "Back to the environment defaults.")}
+              onClick={() => window.confirm("Forget the changes made here and use the defaults?") && send("DELETE", undefined, "Back to the defaults.")}
             >
               Reset to defaults
             </button>
           )}
-          {message && <span className={`feed-result ${message.ok ? "ok" : "error"}`}>{message.text}</span>}
+          {message && (message.ok ? <span className="feed-result ok">{message.text}</span> : <ErrorNote text={message.text} />)}
         </div>
       </fieldset>
     </form>

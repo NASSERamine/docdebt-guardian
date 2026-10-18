@@ -57,6 +57,12 @@ class JudgeConfig:
         confidence_threshold: below this confidence the result is an
             abstention. Calibrate it with ``scripts/calibrate.py``.
         use_context: pass retrieved context to the detection prompts.
+        keep_unverified_explanations: the application's mode. A debt
+            verdict always stands (one vote, no threshold, the human
+            decides); every explanation the model gives becomes a finding,
+            and only the quotes found word for word are kept as highlights.
+            Without any explanation, a generic ``llm-verdict`` finding on the
+            description lets the repair judge it.
     """
 
     patterns: list[str] = field(default_factory=lambda: ["zeroshot"])
@@ -66,6 +72,7 @@ class JudgeConfig:
     require_citation: bool = True
     confidence_threshold: float = 0.0
     use_context: bool = False
+    keep_unverified_explanations: bool = False
 
 
 @dataclass
@@ -165,6 +172,25 @@ class Judge:
             return [], None, 0
         citations = parse_claim_citations(response.text) or []
         checked = validate_citations(citations, unit.javadoc or "", unit.code)
+        if self.config.keep_unverified_explanations:
+            findings = [
+                Finding(
+                    kind=FindingKind.SEMANTIC,
+                    severity=Severity.ERROR,
+                    rule="contradicted-claim",
+                    message=c.citation.reason or "The documentation contradicts the code.",
+                    method_id=unit.id,
+                    field=c.citation.field or "description",
+                    line=unit.javadoc_start_line,
+                    quoted_doc=c.citation.claim if c.valid else None,
+                    quoted_code=c.citation.code if c.valid else None,
+                    confidence=confidence,
+                    model=self.model_id,
+                    prompt_version=EXPLAIN_VERSION,
+                )
+                for c in checked
+            ]
+            return findings, response.text, sum(1 for c in checked if not c.valid)
         findings = [
             Finding(
                 kind=FindingKind.SEMANTIC,
@@ -226,7 +252,24 @@ class Judge:
                 result.semantic_findings = findings
                 result.explanation_raw = raw
                 result.rejected_citations = rejected
-            if result.semantic_findings:
+            if self.config.keep_unverified_explanations:
+                result.status, result.reason = Status.DEBT, "model_verdict"
+                if not result.semantic_findings and not has_structural:
+                    result.semantic_findings = [
+                        Finding(
+                            kind=FindingKind.SEMANTIC,
+                            severity=Severity.ERROR,
+                            rule="llm-verdict",
+                            message="The model judged that this Javadoc does not match the code.",
+                            method_id=unit.id,
+                            field="description",
+                            line=unit.javadoc_start_line,
+                            confidence=confidence,
+                            model=self.model_id,
+                            prompt_version=votes[0].prompt_version if votes else None,
+                        )
+                    ]
+            elif result.semantic_findings:
                 result.status, result.reason = Status.DEBT, "cited_contradiction"
             elif has_structural:
                 result.status, result.reason = Status.DEBT, "structural_support"

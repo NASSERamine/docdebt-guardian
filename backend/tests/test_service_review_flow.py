@@ -136,7 +136,7 @@ def make_flow(monkeypatch, fake, tmp_path, responder):
     deps = GraphDeps(auditor=Auditor(), router=None, repairer=repairer)
     graph = GraphApp(deps, InMemorySaver())
     store = ReviewStore(tmp_path / "state.sqlite3")
-    return ReviewFlow(github, graph, store)
+    return ReviewFlow(github, graph, store, spec=spec)
 
 
 def structural_fix_responder(prompt, m):
@@ -222,7 +222,8 @@ def test_reject_makes_no_commit(monkeypatch, tmp_path):
 
     short_id = re.search(r"/docdebt accept ([0-9a-f]+)", fake.comments[0]).group(1)
     flow.handle_command(
-        comment_event(f"/docdebt reject {short_id}"), parse_slash_command(f"/docdebt reject {short_id}")
+        comment_event(f"/docdebt reject {short_id} other"),
+        parse_slash_command(f"/docdebt reject {short_id} other"),
     )
     assert not fake.commits
     assert "rejected" in fake.comments[-1]

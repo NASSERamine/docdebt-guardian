@@ -1,0 +1,9 @@
+Date      : 2026-10-18 14:35:16 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/parity_check.py --research-src research_ref/src --dataset datasets/verified_final_DEFINITIVE_363.xlsx
+----------------------------------------------------------------
+Signatures identical: 726/726
+Structural-debt decisions identical: 726/726
+Code de sortie : 0

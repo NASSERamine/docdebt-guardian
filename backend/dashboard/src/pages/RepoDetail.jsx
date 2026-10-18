@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { errorText, getJson, sendWithToken } from "../api.js";
-import { StatTiles, StateNote, SyncButton, formatDate, timeAgo } from "../components.jsx";
+import { StatTiles, StateNote, SyncButton, formatDate, money, timeAgo } from "../components.jsx";
 import { useApi } from "../hooks.js";
 import UsageChart from "../UsageChart.jsx";
 import { ProposalHistory } from "./History.jsx";
-import RepoInsights from "./RepoInsights.jsx";
+import RepoInsights, { Progress } from "./RepoInsights.jsx";
 
 function connectionLabel(detail) {
   if (detail.connected) return { cls: "connected", text: `connected${detail.connected_at ? ` since ${formatDate(detail.connected_at)}` : ""}` };
@@ -71,10 +71,11 @@ function ScanButton({ owner, repo, lastScan, enabled, onFinished }) {
         className="primary-btn"
         disabled={!enabled || running}
         onClick={start}
-        title={enabled ? "Review every open pull request now" : "Set DOCDEBT_DASHBOARD_TOKEN to scan from the dashboard"}
+        title={enabled ? "Review every open pull request now" : "Sign in, or set DOCDEBT_DASHBOARD_TOKEN, to scan from here"}
       >
         {running ? "Scanning…" : "Scan now"}
       </button>
+      {running && <Progress progress={{ done: scan.progress_done || 0, total: scan.progress_total || 0 }} label="Pull requests" />}
       <span className={`scan-status ${scan?.status === "failed" || error ? "error" : ""}`}>
         {error ||
           (scan &&
@@ -155,7 +156,7 @@ export default function RepoDetail() {
                   ...(s.expired ? [{ label: "expired", value: s.expired }] : []),
                   { label: "LLM calls", value: s.llm_calls },
                   { label: "tokens", value: s.tokens.toLocaleString() },
-                  { label: "cost", value: `$${s.cost_usd.toFixed(4)}` },
+                  { label: "cost", value: money(s.cost_usd) },
                   { label: "avg run", value: `${s.avg_latency_s.toFixed(1)} s` },
                 ]}
               />

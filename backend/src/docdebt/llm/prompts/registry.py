@@ -45,6 +45,20 @@ SCREENED_ON: dict[str, str] = {"gpt-5.6-luna": "gpt-5.6"}
 for _model, _sibling in SCREENED_ON.items():
     LOCKED_DETECTION_WORDINGS.setdefault(_model, dict(LOCKED_DETECTION_WORDINGS[_sibling]))
 
+# Models offered by the application whose screened indices are not in this
+# file yet: they use the first zero-shot wording, and their verdicts say the
+# wording was not screened (``is_screened``). Replace with the research
+# screening results when available.
+UNSCREENED_DETECTION_WORDINGS: dict[str, dict[str, int]] = {"gemini-3.1-pro": {"zeroshot": 0}}
+for _model, _indices in UNSCREENED_DETECTION_WORDINGS.items():
+    LOCKED_DETECTION_WORDINGS.setdefault(_model, dict(_indices))
+
+
+def is_screened(model_id: str) -> bool:
+    """Whether ``model_id`` detects with a wording screened for it (or its family)."""
+    return model_id not in UNSCREENED_DETECTION_WORDINGS and model_id in LOCKED_DETECTION_WORDINGS
+
+
 # (model, pattern) pairs whose every screened wording collapsed to a constant
 # answer, or that collapsed at full run. Using them triggers a warning.
 COLLAPSED: frozenset[tuple[str, str]] = frozenset(

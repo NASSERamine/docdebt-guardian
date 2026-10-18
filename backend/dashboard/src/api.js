@@ -59,6 +59,25 @@ export async function sendWithToken(method, path, payload) {
   return { status: res.status, body };
 }
 
+// What to do about an error, from its text: every error the user can fix
+// says where (U4). Returns { to, label, external } or null.
+export function actionFor(text) {
+  const t = (text || "").toLowerCase();
+  if (/api key|model page|provider refused|could not call the model|no model is configured|choose a model/.test(t))
+    return { to: "/model", label: "Open the Model page" };
+  if (/not connected|install the app|no github installation/.test(t)) return { to: "/repositories", label: "Add or connect the repository" };
+  if (/cost cap/.test(t)) return { to: "/settings", label: "Change the cost cap" };
+  if (/sign in|session ended|sign-in expired/.test(t)) return { to: "/", label: "Sign in again" };
+  if (/regenerate first|no verified regeneration/.test(t)) return { to: null, label: "Use “Regenerate” first" };
+  if (/checks/.test(t))
+    return {
+      to: "https://docs.github.com/en/apps/maintaining-github-apps/modifying-a-github-app-registration",
+      label: "Give the App the Checks permission",
+      external: true,
+    };
+  return null;
+}
+
 // FastAPI's 422 detail is a list of { loc, msg }; anything else is a string.
 export function errorText(body, status) {
   if (Array.isArray(body?.detail)) return body.detail.map((d) => `${d.loc?.at(-1)}: ${d.msg}`).join("; ");

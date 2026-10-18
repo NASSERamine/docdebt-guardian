@@ -1,0 +1,16 @@
+Date      : 2026-10-18 16:00:42 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/validate_requirements.py BF3 BF8 BF9 BF10 BF11 BF12 BF19
+----------------------------------------------------------------
+BF3   OK     Review every pull request, limited to the Java methods it changes  [7 passed, 232 deselected in 3.22s]
+BF8   OK     A PR comment: problem, explanation, diff, short id; never posted twice  [4 passed, 235 deselected in 1.40s]
+BF9   OK     Check run: success / neutral / failure; a missing permission never breaks a review  [4 passed, 235 deselected in 1.35s]
+BF10  OK     Accept or reject; a rejection needs its reason; bot comments are never commands  [9 passed, 230 deselected in 3.84s]
+BF11  OK     Commit the accepted version, with its safeguards  [7 passed, 232 deselected in 1.69s]
+BF12  OK     Accept with an edit, checked by the exact rules, added to the knowledge base  [3 passed, 236 deselected in 2.32s]
+BF19  OK     Scan now over the open pull requests, with live progress  [6 passed, 233 deselected in 3.05s]
+
+7/7 functional requirements validated.
+Code de sortie : 0

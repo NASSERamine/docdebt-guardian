@@ -1,0 +1,72 @@
+Date      : 2026-10-18 15:48:49 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python -m pytest tests/test_rag.py tests/test_repair.py tests/test_repair_hybrid.py -v -o addopts=
+----------------------------------------------------------------
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/nasser/Projects/docdebt-guardian/docdebt-guardian/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/nasser/Projects/docdebt-guardian/docdebt-guardian/backend
+configfile: pyproject.toml
+plugins: langsmith-0.14.11, anyio-4.15.1
+collecting ... collected 55 items
+
+tests/test_rag.py::test_tokenize_splits_identifiers_and_bm25_ranks_relevant_documents PASSED [  1%]
+tests/test_rag.py::test_rebuild_indexes_only_debt_free_documented_methods_tests_and_readme PASSED [  3%]
+tests/test_rag.py::test_rebuild_keeps_validated_chunks PASSED            [  5%]
+tests/test_rag.py::test_siblings_are_the_three_closest_documented_methods_of_the_file PASSED [  7%]
+tests/test_rag.py::test_rrf_fuses_ranks_and_breaks_ties_by_id PASSED     [  9%]
+tests/test_rag.py::test_hybrid_search_uses_bm25_and_vectors_with_the_leak_guard PASSED [ 10%]
+tests/test_rag.py::test_bm25_alone_when_no_embedder PASSED               [ 12%]
+tests/test_rag.py::test_tests_readme_and_validated_chunks_compete_in_the_search PASSED [ 14%]
+tests/test_rag.py::test_same_index_same_method_same_context PASSED       [ 16%]
+tests/test_rag.py::test_context_text_names_each_source_and_stays_within_budget PASSED [ 18%]
+tests/test_rag.py::test_a_push_updates_only_the_changed_files PASSED     [ 20%]
+tests/test_rag.py::test_chroma_index_answers_like_the_exact_index PASSED [ 21%]
+tests/test_rag.py::test_readme_is_found PASSED                           [ 23%]
+tests/test_rag.py::test_bm25_mode_needs_no_embedding_model PASSED        [ 25%]
+tests/test_repair.py::test_layout_roundtrip_is_byte_identical PASSED     [ 27%]
+tests/test_repair.py::test_rename_reuses_the_slot_and_ignores_model_rewrites PASSED [ 29%]
+tests/test_repair.py::test_new_tags_are_ordered_by_signature PASSED      [ 30%]
+tests/test_repair.py::test_first_tag_on_description_only_doc_gets_a_blank_separator PASSED [ 32%]
+tests/test_repair.py::test_single_line_comment_is_rendered_in_standard_layout PASSED [ 34%]
+tests/test_repair.py::test_replace_keeps_trailing_blank_and_other_blocks_verbatim PASSED [ 36%]
+tests/test_repair.py::test_missing_and_unchanged_fields_are_reported PASSED [ 38%]
+tests/test_repair.py::test_plan_normalize_resolves_overlaps PASSED       [ 40%]
+tests/test_repair.py::test_extract_block_variants PASSED                 [ 41%]
+tests/test_repair.py::test_plan_from_structural_and_semantic_findings PASSED [ 43%]
+tests/test_repair.py::test_registry_locked_unscreened_and_feedback PASSED [ 45%]
+tests/test_repair.py::test_repair_fewshot_uses_explicit_positions PASSED [ 47%]
+tests/test_repair.py::test_verifier_flags_tampering_empty_fields_and_lingering_claims PASSED [ 49%]
+tests/test_repair.py::test_repairer_structural_happy_path_ignores_model_rewrites PASSED [ 50%]
+tests/test_repair.py::test_repairer_retries_with_feedback_then_succeeds PASSED [ 52%]
+tests/test_repair.py::test_repairer_fails_after_max_attempts_and_never_proposes PASSED [ 54%]
+tests/test_repair.py::test_repairer_truncated_no_block_and_llm_errors PASSED [ 56%]
+tests/test_repair.py::test_repairer_semantic_repair_and_unchanged PASSED [ 58%]
+tests/test_repair.py::test_repairer_skips_when_nothing_to_do PASSED      [ 60%]
+tests/test_repair.py::test_hint_findings_only_in_first_prompt PASSED     [ 61%]
+tests/test_repair.py::test_apply_to_file_writes_and_refuses_stale_files PASSED [ 63%]
+tests/test_repair.py::test_cli_repair_end_to_end PASSED                  [ 65%]
+tests/test_repair.py::test_cli_reports_a_missing_path PASSED             [ 67%]
+tests/test_repair.py::test_build_repairer_hint_override PASSED           [ 69%]
+tests/test_repair.py::test_cli_semantic_repair_with_hints_and_merged_usage PASSED [ 70%]
+tests/test_repair.py::test_semantic_field_is_located_from_the_quote_not_from_the_models_label PASSED [ 72%]
+tests/test_repair.py::test_rewrite_scope_guard_catches_wholesale_rewrite_but_not_reword PASSED [ 74%]
+tests/test_repair.py::test_verifier_rejects_a_wholesale_rewrite_of_a_multi_sentence_field PASSED [ 76%]
+tests/test_repair.py::test_load_settings_defaults_base_dir_to_the_analysed_path_not_cwd PASSED [ 78%]
+tests/test_repair_hybrid.py::test_spans_patch_keeps_untouched_lines_byte_identical PASSED [ 80%]
+tests/test_repair_hybrid.py::test_brace_tokens_roundtrip_and_tolerant_json_parsing PASSED [ 81%]
+tests/test_repair_hybrid.py::test_rename_is_deterministic_and_the_model_only_judges PASSED [ 83%]
+tests/test_repair_hybrid.py::test_a_cited_semantic_debt_is_judged_and_corrected PASSED [ 85%]
+tests/test_repair_hybrid.py::test_post_validation_reverts_invented_identifiers_and_cosmetic_edits PASSED [ 87%]
+tests/test_repair_hybrid.py::test_a_missing_param_is_written_and_a_failed_write_is_retried_once PASSED [ 89%]
+tests/test_repair_hybrid.py::test_a_write_the_model_never_answers_fails_the_structural_check PASSED [ 90%]
+tests/test_repair_hybrid.py::test_an_answer_without_the_item_level_is_still_read PASSED [ 92%]
+tests/test_repair_hybrid.py::test_context_is_given_to_the_model_as_reference_only PASSED [ 94%]
+tests/test_repair_hybrid.py::test_no_debt_finding_means_no_model_call PASSED [ 96%]
+tests/test_repair_hybrid.py::test_llm_error_is_reported_as_failed PASSED [ 98%]
+tests/test_repair_hybrid.py::test_judge_variants_flagged_and_all PASSED  [100%]
+
+============================== 55 passed in 2.09s ==============================
+Code de sortie : 0

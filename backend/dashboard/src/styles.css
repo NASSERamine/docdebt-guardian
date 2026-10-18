@@ -1470,3 +1470,238 @@ a.primary-btn:hover {
   margin-bottom: 4px;
   font-size: 12px;
 }
+
+/* ---- v3: status banner, getting started, model page, review queue, comparison ---- */
+
+.status-banner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding: 6px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 12.5px;
+  color: var(--ink-dim);
+}
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-dim);
+  text-decoration: none;
+}
+a.status-item:hover {
+  color: var(--ink);
+}
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.status-dot.ok {
+  background: var(--accepted);
+}
+.status-dot.warn {
+  background: var(--pending);
+}
+.status-dot.bad {
+  background: var(--rejected);
+}
+.nav-count {
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: var(--pending-dim);
+  color: var(--pending);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.onboarding-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.onboarding-steps li {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.onboarding-steps li.done {
+  color: var(--ink-dim);
+}
+.onboarding-steps li.next {
+  border-color: var(--action);
+}
+.onboarding-steps li p {
+  margin: 2px 0 0;
+}
+.step-mark {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  font-size: 12px;
+  font-weight: 600;
+}
+.onboarding-steps li.done .step-mark {
+  background: var(--accepted-dim);
+  color: var(--accepted);
+}
+
+.key-input {
+  width: 100%;
+  max-width: 420px;
+  font-family: var(--font-mono);
+}
+.price-inputs {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.price-inputs label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink-dim);
+}
+.price-inputs input {
+  width: 110px;
+}
+.current-model {
+  margin: 8px 0 12px;
+}
+.plain-list {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--ink-dim);
+}
+.plain-list li {
+  margin: 2px 0;
+}
+.error-action {
+  margin-left: 4px;
+  color: var(--action);
+  font-weight: 600;
+}
+.field-ref {
+  margin-right: 6px;
+  color: var(--ink-dim);
+}
+
+.compare {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+@media (max-width: 900px) {
+  .compare {
+    grid-template-columns: 1fr;
+  }
+}
+.compare-col {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.compare-col.chosen {
+  border-color: var(--accepted);
+}
+.compare-col .code-block {
+  flex: 1;
+  margin: 0;
+  overflow-x: auto;
+}
+.compare-head {
+  display: flex;
+  flex-direction: column;
+}
+.compare-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.word-diff .wd-add {
+  background: var(--accepted-dim);
+  color: #b8f0c9;
+  border-radius: 2px;
+}
+.word-diff .wd-del {
+  background: var(--rejected-dim);
+  color: #ffc2b5;
+  text-decoration: line-through;
+  border-radius: 2px;
+}
+.edit-box {
+  margin-top: 12px;
+}
+.edit-area {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+.code-line.highlighted,
+.code-block.highlighted {
+  background: var(--pending-dim);
+}
+
+.progress {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  max-width: 360px;
+  height: 20px;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  background: var(--action-dim);
+  transition: width 0.3s ease;
+}
+.progress-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--ink);
+}
+
+.queue-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.shortcuts kbd {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--surface-raised);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.compare-col .code-block {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.onboarding { margin-bottom: 18px; }

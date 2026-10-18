@@ -1,0 +1,46 @@
+Date      : 2026-10-18 15:26:24 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/check_model.py --model gpt-5.6-luna --price-in 1.25 --price-out 10 --json validation/I2/check_model.json
+----------------------------------------------------------------
+Model      : gpt-5.6-luna (OpenAI), key ...tvkA
+Prompt     : screened in the research
+Connection : OK
+
+--- toCelsius: exact rule (phantom @param)
+Expected   : debt
+Obtained   : debt  OK
+Rules      : missing-param, unknown-param
+Model      : INCOMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Explanation: [@param tempInCelsius] The documentation names the parameter `tempInCelsius`, but the method declares it as `tempInKelvin`. (found word for word)
+  doc  : @param tempInCelsius
+  code : public double toCelsius(double tempInKelvin) {
+Calls/cost : 2 call(s), $0.003683
+
+--- pick: model only (description contradicted by the code)
+Expected   : debt
+Obtained   : debt  OK
+Rules      : none
+Model      : INCOMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Explanation: [description] The method returns the minimum of the two values, not the maximum. (found word for word)
+  doc  : Returns the maximum of the two values.
+  code : return Math.min(a, b);
+Explanation: [@return] The returned value is the smaller of a and b, not the larger. (found word for word)
+  doc  : @return the larger of a and b
+  code : return Math.min(a, b);
+Calls/cost : 2 call(s), $0.002462
+
+--- add: correct documentation
+Expected   : clean
+Obtained   : clean  OK
+Rules      : none
+Model      : COMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Calls/cost : 1 call(s), $0.000386
+
+Total      : 5 call(s), 1361 input / 483 output tokens, $0.006531
+Result     : 3/3 verdict(s) as expected
+Code de sortie : 0

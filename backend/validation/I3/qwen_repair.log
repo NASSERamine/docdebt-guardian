@@ -1,0 +1,16 @@
+Date      : 2026-10-18 15:50:18 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/summarize_repair_run.py runs/repair_qwen_structural.csv
+----------------------------------------------------------------
+Run        : runs/repair_qwen_structural.csv (84 items, model(s): qwen2.5-coder:7b)
+Statuses   : {'verified': 78, 'not_needed': 6}
+Not needed : 6
+To repair  : 78
+Verified   : 78/78 (100%)
+  attempt 1: 72 (92%)
+  attempt 2+: 6 (8%)
+Failures   : 0
+Mean time  : 5.7 s per item
+Code de sortie : 0

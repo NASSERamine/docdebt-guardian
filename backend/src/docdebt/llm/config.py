@@ -34,6 +34,9 @@ class ModelSpec(BaseModel):
             truncates them, so it is always set explicitly.
         base_url: Ollama server URL, or a custom OpenAI-compatible endpoint.
         api_key_env: environment variable holding the API key (cloud only).
+        api_key: the API key itself, when it comes from the application's
+            saved model configuration rather than the environment. Never
+            serialized, never shown.
         timeout_s: per-request timeout.
         max_retries: attempts per call (errors and truncations share this budget).
         extra: extra keyword arguments passed to the LangChain constructor
@@ -50,6 +53,7 @@ class ModelSpec(BaseModel):
     num_ctx: int = 8192
     base_url: str | None = None
     api_key_env: str | None = None
+    api_key: str | None = Field(default=None, exclude=True, repr=False)
     timeout_s: float = 600.0
     max_retries: int = 3
     extra: dict[str, object] = Field(default_factory=dict)

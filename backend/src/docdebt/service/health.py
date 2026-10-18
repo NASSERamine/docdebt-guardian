@@ -94,8 +94,11 @@ def run_health_scan(
     max_files: int = 300,
     knowledge: KnowledgeBase | None = None,
     embedder=None,
+    progress=None,
 ) -> dict:
-    """Scan the default branch; returns the values of the snapshot to store."""
+    """Scan the default branch and rebuild the knowledge base; returns the
+    values of the snapshot to store. ``progress(done, total)`` is called as
+    the files are read, for the progress bar."""
     meta = github.get_repository(owner, repo)
     branch = meta.get("default_branch") or "main"
     sha = github.get_branch_head(owner, repo, branch)
@@ -109,7 +112,13 @@ def run_health_scan(
     main_paths = main_paths[:budget]
     test_paths = test_paths[: max(0, budget - len(main_paths))]
 
+    total = len(main_paths) + (len(test_paths) + 1 if knowledge is not None else 0)
+    read = [0]
+
     def fetch(path: str) -> str | None:
+        read[0] += 1
+        if progress is not None:
+            progress(read[0], total)
         try:
             return github.get_file_content(owner, repo, path, sha)[0]
         except (GithubApiError, UnicodeDecodeError, KeyError):
@@ -126,3 +135,42 @@ def run_health_scan(
             owner, repo, {**main_files, **test_files}, readme=readme, embedder=embedder, commit_sha=sha
         )
     return {**figures, "branch": branch, "commit_sha": sha, "truncated": truncated}
+
+
+def run_push_index(
+    github: GithubClient,
+    owner: str,
+    repo: str,
+    *,
+    after_sha: str,
+    changed: list[str],
+    removed: list[str],
+    knowledge: KnowledgeBase,
+    embedder=None,
+) -> dict:
+    """Incremental update of the knowledge base after a push to the default
+    branch: only the Java files the push added, modified or removed (and the
+    README when it changed) are re-indexed."""
+    java_changed = sorted(p for p in changed if p.endswith(".java"))
+    contents = {}
+    for path in java_changed:
+        try:
+            contents[path] = github.get_file_content(owner, repo, path, after_sha)[0]
+        except (GithubApiError, UnicodeDecodeError, KeyError):
+            logger.warning("push index: could not read %s/%s:%s", owner, repo, path)
+    readme_path = find_readme(changed)
+    readme = None
+    if readme_path:
+        try:
+            readme = github.get_file_content(owner, repo, readme_path, after_sha)[0]
+        except (GithubApiError, UnicodeDecodeError, KeyError):
+            readme = None
+    return knowledge.update_files(
+        owner,
+        repo,
+        contents,
+        [p for p in removed if p.endswith(".java")],
+        readme=readme,
+        embedder=embedder,
+        commit_sha=after_sha,
+    )

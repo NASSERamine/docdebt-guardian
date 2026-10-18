@@ -1,0 +1,82 @@
+{
+  "model": "gpt-5.6-luna",
+  "results": [
+    {
+      "method": "toCelsius",
+      "case": "exact rule (phantom @param)",
+      "expected": "debt",
+      "obtained": "debt",
+      "match": true,
+      "rules": [
+        "missing-param",
+        "unknown-param"
+      ],
+      "model_answer": [
+        "INCOMPLETE"
+      ],
+      "prompt_version": [
+        "detect/zeroshot/w0/aed96cbc"
+      ],
+      "explanations": [
+        {
+          "field": "@param tempInCelsius",
+          "message": "The documentation names the parameter `tempInCelsius`, but the method declares it as `tempInKelvin`.",
+          "quoted_doc": "@param tempInCelsius",
+          "quoted_code": "public double toCelsius(double tempInKelvin) {",
+          "found_word_for_word": true
+        }
+      ],
+      "calls": 2,
+      "cost_usd": 0.003683
+    },
+    {
+      "method": "pick",
+      "case": "model only (description contradicted by the code)",
+      "expected": "debt",
+      "obtained": "debt",
+      "match": true,
+      "rules": [],
+      "model_answer": [
+        "INCOMPLETE"
+      ],
+      "prompt_version": [
+        "detect/zeroshot/w0/aed96cbc"
+      ],
+      "explanations": [
+        {
+          "field": "description",
+          "message": "The method returns the minimum of the two values, not the maximum.",
+          "quoted_doc": "Returns the maximum of the two values.",
+          "quoted_code": "return Math.min(a, b);",
+          "found_word_for_word": true
+        },
+        {
+          "field": "@return",
+          "message": "The returned value is the smaller of a and b, not the larger.",
+          "quoted_doc": "@return the larger of a and b",
+          "quoted_code": "return Math.min(a, b);",
+          "found_word_for_word": true
+        }
+      ],
+      "calls": 2,
+      "cost_usd": 0.002462
+    },
+    {
+      "method": "add",
+      "case": "correct documentation",
+      "expected": "clean",
+      "obtained": "clean",
+      "match": true,
+      "rules": [],
+      "model_answer": [
+        "COMPLETE"
+      ],
+      "prompt_version": [
+        "detect/zeroshot/w0/aed96cbc"
+      ],
+      "explanations": [],
+      "calls": 1,
+      "cost_usd": 0.000386
+    }
+  ]
+}

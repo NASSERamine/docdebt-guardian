@@ -34,7 +34,7 @@ class GraphDeps:
 
     auditor: Auditor
     router: Router | None
-    repairer: Repairer
+    repairer: Repairer | None
     repairers: dict[str, Any] = field(default_factory=dict)
     rag: Any = None
     rag_repair: bool = False
@@ -83,8 +83,11 @@ def make_detect_node(deps: GraphDeps):
             if deps.rag is not None and deps.rag_detection
             else []
         )
+        votes = routed.final.votes if routed.final else []
+        llm_error = next((v.error for v in votes if v.error), None)
         return {
             "rag_context": rag_context,
+            "detection_error": llm_error if routed.final and routed.final.valid_votes == 0 else None,
             "detection_status": routed.status.value,
             "detection_reason": routed.final.reason if routed.final else routed.note,
             "detection_model": routed.final.model_id if routed.final else None,
@@ -96,7 +99,10 @@ def make_detect_node(deps: GraphDeps):
 
 
 def has_debt(state: DocDebtState) -> bool:
+    """Debt when an exact rule fails OR the model says so (one detection on the whole Javadoc)."""
     if state["has_structural_debt"]:
+        return True
+    if state.get("detection_status") == DetectionOutcome.DEBT.value:
         return True
     return bool(state.get("semantic_findings"))
 
@@ -105,6 +111,8 @@ def make_repair_node(deps: GraphDeps):
     def repair(state: DocDebtState) -> dict:
         unit = unit_from_dict(state["unit"])
         repairer = deps.repairers.get(state.get("detection_model") or "") or deps.repairer
+        if repairer is None:  # no model configured: the exact rules ran, nothing can be proposed
+            return {"repair_status": RepairStatus.FAILED.value, "repair_reason": "no_model_configured"}
         context = None
         rag_context = list(state.get("rag_context", []))
         if deps.rag is not None and deps.rag_repair:

@@ -1,11 +1,14 @@
 import { Link } from "react-router-dom";
-import { PrecisionCard, ProposalList, StateNote, repoPath } from "../components.jsx";
+import { PrecisionCard, ProposalList, StateNote, money, repoPath } from "../components.jsx";
 import { useApi, useDecision } from "../hooks.js";
+import Onboarding from "../Onboarding.jsx";
 import UsageChart from "../UsageChart.jsx";
 
 const REFRESH_MS = 15000;
 
-function StatusLine({ summary }) {
+function StatusLine({ summary, costs }) {
+  const month = new Date().toISOString().slice(0, 7);
+  const thisMonth = costs.monthly.find((m) => m.month === month);
   return (
     <div className="statusline">
       <span className="metric">
@@ -18,7 +21,11 @@ function StatusLine({ summary }) {
         <strong className="accepted">{summary.accepted}</strong> accepted
       </span>
       <span className="metric">
-        <strong>${summary.cost_usd.toFixed(2)}</strong> total cost
+        <strong>{money(thisMonth?.cost_usd ?? 0)}</strong> this month
+      </span>
+      <span className="metric">
+        <strong>{money(summary.cost_usd)}</strong> total cost
+        {costs.cap_usd != null && <span className="muted"> / cap {money(costs.cap_usd)}</span>}
       </span>
     </div>
   );
@@ -77,7 +84,16 @@ function RepoList({ repos }) {
 
 export default function Overview() {
   const { data, error, loading, refresh } = useApi(
-    ["/api/summary", "/api/repos", "/api/proposals?limit=10", "/api/usage?days=14", "/api/dashboard-config", "/api/precision?days=30"],
+    [
+      "/api/summary",
+      "/api/repos",
+      "/api/proposals?limit=10",
+      "/api/usage?days=14",
+      "/api/dashboard-config",
+      "/api/precision?days=30",
+      "/api/costs",
+      "/api/status",
+    ],
     { refreshMs: REFRESH_MS },
   );
   const decisions = useDecision(refresh);
@@ -85,20 +101,27 @@ export default function Overview() {
   return (
     <StateNote error={!data && error} loading={!data && loading}>
       {data && (() => {
-        const [summary, repos, proposals, usage, config, precision] = data;
+        const [summary, repos, proposals, usage, config, precision, costs, status] = data;
         return (
           <>
             <section className="intro">
               <p>
                 <strong>DocDebt Guardian</strong> finds Java documentation that no longer matches its code — a renamed
                 parameter, a missing <code>@return</code>, a description the code contradicts — in every pull request, and
-                proposes a verified fix that a person accepts or rejects.
+                proposes a verified fix that a person accepts, edits, regenerates or rejects.
               </p>
               <Link to="/how-it-works" className="intro-link">
                 How it works →
               </Link>
             </section>
-            <StatusLine summary={summary} />
+            <Onboarding steps={status.onboarding} />
+            <StatusLine summary={summary} costs={costs} />
+            {summary.pending > 0 && (
+              <p className="notice">
+                {summary.pending} proposal{summary.pending > 1 ? "s" : ""} waiting for a decision.{" "}
+                <Link to="/review">Review them one after the other →</Link>
+              </p>
+            )}
             <div className="columns">
               <div className="panel">
                 <h2>Repositories</h2>

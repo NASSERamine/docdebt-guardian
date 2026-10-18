@@ -310,7 +310,7 @@ def decide_client(app_settings, monkeypatch):
 
     calls = []
 
-    def fake_decide(settings, store, request, decision, installation_id, reason=None):
+    def fake_decide(settings, store, request, decision, installation_id, reason=None, **kwargs):
         calls.append((request.short_id, decision, installation_id))
         store.mark_resolved(request.short_id, decision, reason)
         return DecisionOutcome(DecisionStatus.APPLIED, "Applied the fix.", "abcdef1")
@@ -339,7 +339,8 @@ def _proposal(app_settings, installation_id="555", repo="demo"):
 
 def _decide(client, short_id, decision="accept", token=DASHBOARD_TOKEN):
     headers = {"Authorization": f"Bearer {token}"} if token is not None else {}
-    return client.post(f"/api/proposals/{short_id}/decide", json={"decision": decision}, headers=headers)
+    body = {"decision": decision, **({"reason": "other"} if decision == "reject" else {})}
+    return client.post(f"/api/proposals/{short_id}/decide", json=body, headers=headers)
 
 
 def test_dashboard_decisions_are_disabled_without_a_configured_token(client, app_settings):

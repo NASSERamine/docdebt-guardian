@@ -110,10 +110,10 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE TABLE IF NOT EXISTS repo_settings (
     owner                 TEXT NOT NULL,
     repo                  TEXT NOT NULL,
-    allow_cloud           INTEGER NOT NULL DEFAULT 0,  -- may send code to the cloud model
-    block_on_structural   INTEGER NOT NULL DEFAULT 0,  -- the check run fails on pending structural debt
-    rag_enabled           INTEGER NOT NULL DEFAULT 1,
-    confidence_threshold  REAL,                        -- NULL: the global setting
+    allow_cloud           INTEGER NOT NULL DEFAULT 0,  -- unused since v3 (kept for older databases)
+    block_on_structural   INTEGER NOT NULL DEFAULT 0,  -- the check run fails while debt is pending
+    rag_enabled           INTEGER NOT NULL DEFAULT 1,  -- unused since v3: retrieval is always on
+    confidence_threshold  REAL,                        -- unused since v3: no threshold
     updated_at            REAL NOT NULL,
     PRIMARY KEY (owner, repo)
 );
@@ -141,6 +141,29 @@ CREATE TABLE IF NOT EXISTS debt_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_debt_snapshots_repo ON debt_snapshots (owner, repo, started_at);
 
+-- The model the application calls, chosen on the Model page. ``scope`` is
+-- "user:<github_id>" in sign-in mode, "local" in local mode. The API key is
+-- encrypted (docdebt.service.secrets) and never sent back to the browser.
+CREATE TABLE IF NOT EXISTS llm_config (
+    scope            TEXT PRIMARY KEY,
+    model            TEXT NOT NULL,
+    api_key_enc      TEXT NOT NULL,
+    key_hint         TEXT NOT NULL,
+    price_in_per_m   REAL,
+    price_out_per_m  REAL,
+    last_test_ok     INTEGER,
+    last_test_error  TEXT,
+    last_test_at     REAL,
+    updated_at       REAL NOT NULL
+);
+
+-- Small facts for the status banner (e.g. when the last webhook arrived).
+CREATE TABLE IF NOT EXISTS meta (
+    key         TEXT PRIMARY KEY,
+    value       TEXT NOT NULL,
+    updated_at  REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS installations (
     owner            TEXT NOT NULL,
     repo             TEXT NOT NULL,
@@ -165,26 +188,32 @@ def _visible_clause(visible: Iterable[str] | None, alias: str = "") -> tuple[str
 
 
 # Recorded with every proposal, for "learning from decisions": what was found,
-# by which model, how confident it was, which mechanism repaired it, and why
-# a reviewer rejected it.
+# by which model, which mechanism repaired it, what was finally committed, and
+# why a reviewer rejected it. ``debt_kind`` and ``confidence`` are kept for
+# databases written by earlier versions; new proposals leave them empty.
 _PROPOSAL_METADATA = (
-    ("debt_kind", "TEXT"),  # "structural" | "semantic" | "both"
+    ("debt_kind", "TEXT"),
     ("rules", "TEXT"),  # comma-separated rule ids
-    ("confidence", "REAL"),  # the Judge's confidence (semantic debt only)
+    ("confidence", "REAL"),
     ("detection_model", "TEXT"),
     ("repair_model", "TEXT"),
     ("repair_mechanism", "TEXT"),
     ("line", "INTEGER"),  # first line of the Javadoc in the file
     ("reject_reason", "TEXT"),
     ("decided_at", "REAL"),
+    ("explanation", "TEXT"),  # the model's explanation of the debt (JSON list)
+    ("regen_doc", "TEXT"),  # the regeneration asked from the proposal page, when verified
+    ("regen_status", "TEXT"),  # "verified" | "failed: <reason>" | NULL (never asked)
+    ("edited_doc", "TEXT"),  # the text a reviewer edited before accepting
+    ("accepted_mechanism", "TEXT"),  # "replacement" | "regeneration" | "edited"
+    ("cost_usd", "REAL"),  # LLM cost of this proposal (review and regeneration)
+    ("commit_sha", "TEXT"),
 )
+_UPDATABLE = {name for name, _ in _PROPOSAL_METADATA}
 REJECT_REASONS = ("false_positive", "incorrect_fix", "manual", "other")
-_REPO_DEFAULTS = {
-    "allow_cloud": False,
-    "block_on_structural": False,
-    "rag_enabled": True,
-    "confidence_threshold": None,
-}
+# Per-repository policy: only the merge block remains (stored in the
+# ``block_on_structural`` column of earlier versions, now any pending debt).
+_REPO_DEFAULTS = {"block_on_debt": False}
 
 _STATUS_CLAUSES = {
     "pending": "resolved = 0",
@@ -218,6 +247,22 @@ class ReviewRequest:
     line: int | None = None
     reject_reason: str | None = None
     decided_at: float | None = None
+    explanation: str | None = None
+    regen_doc: str | None = None
+    regen_status: str | None = None
+    edited_doc: str | None = None
+    accepted_mechanism: str | None = None
+    cost_usd: float | None = None
+    commit_sha: str | None = None
+
+    @property
+    def explanation_items(self) -> list[dict]:
+        if not self.explanation:
+            return []
+        try:
+            return list(json.loads(self.explanation))
+        except ValueError:
+            return []
 
 
 class ReviewStore:
@@ -250,6 +295,11 @@ class ReviewStore:
         scan_columns = {row["name"] for row in conn.execute("PRAGMA table_info(scans)")}
         if "already_decided" not in scan_columns:
             conn.execute("ALTER TABLE scans ADD COLUMN already_decided INTEGER NOT NULL DEFAULT 0")
+        for table in ("scans", "debt_snapshots"):
+            existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+            for name in ("progress_done", "progress_total"):
+                if name not in existing:
+                    conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0")
 
     @contextmanager
     def _connect(self):
@@ -646,6 +696,15 @@ class ReviewStore:
                 ("failed" if error else "done", time.time(), error, *counts.values(), scan_id),
             )
 
+    def set_progress(self, table: str, row_id: int, done: int, total: int) -> None:
+        """Progress of a running scan (``scans``) or health scan (``debt_snapshots``)."""
+        if table not in ("scans", "debt_snapshots"):
+            raise ValueError(table)
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE {table} SET progress_done = ?, progress_total = ? WHERE id = ?", (done, total, row_id)
+            )
+
     def get_scan(self, scan_id: int) -> dict | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM scans WHERE id = ?", (scan_id,)).fetchone()
@@ -800,35 +859,145 @@ class ReviewStore:
             ).fetchone()
         if row is None:
             return dict(_REPO_DEFAULTS, updated_at=None)
-        return {
-            "allow_cloud": bool(row["allow_cloud"]),
-            "block_on_structural": bool(row["block_on_structural"]),
-            "rag_enabled": bool(row["rag_enabled"]),
-            "confidence_threshold": row["confidence_threshold"],
-            "updated_at": row["updated_at"],
-        }
+        return {"block_on_debt": bool(row["block_on_structural"]), "updated_at": row["updated_at"]}
 
     def save_repo_settings(self, owner: str, repo: str, values: dict) -> dict:
         current = self.repo_settings(owner, repo)
-        merged = {k: values.get(k, current[k]) for k in _REPO_DEFAULTS}
+        block = bool(values.get("block_on_debt", current["block_on_debt"]))
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO repo_settings (owner, repo, allow_cloud, block_on_structural, rag_enabled, "
-                "confidence_threshold, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?) "
-                "ON CONFLICT(owner, repo) DO UPDATE SET allow_cloud = excluded.allow_cloud, "
-                "block_on_structural = excluded.block_on_structural, rag_enabled = excluded.rag_enabled, "
-                "confidence_threshold = excluded.confidence_threshold, updated_at = excluded.updated_at",
-                (
-                    owner,
-                    repo,
-                    int(bool(merged["allow_cloud"])),
-                    int(bool(merged["block_on_structural"])),
-                    int(bool(merged["rag_enabled"])),
-                    merged["confidence_threshold"],
-                    time.time(),
-                ),
+                "INSERT INTO repo_settings (owner, repo, block_on_structural, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(owner, repo) DO UPDATE SET block_on_structural = excluded.block_on_structural, "
+                "updated_at = excluded.updated_at",
+                (owner, repo, int(block), time.time()),
             )
         return self.repo_settings(owner, repo)
+
+    # -- small facts for the status banner ---------------------------------------------
+
+    def set_meta(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO meta (key, value, updated_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                (key, value, time.time()),
+            )
+
+    def get_meta(self, key: str) -> dict | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM meta WHERE key = ?", (key,)).fetchone()
+        return dict(row) if row else None
+
+    # -- the model configuration (Model page) -------------------------------------------
+
+    def llm_config(self, scope: str) -> dict | None:
+        """The saved model configuration of ``scope`` (API key still encrypted)."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM llm_config WHERE scope = ?", (scope,)).fetchone()
+        return dict(row) if row else None
+
+    def save_llm_config(
+        self,
+        scope: str,
+        *,
+        model: str,
+        api_key_enc: str,
+        key_hint: str,
+        price_in_per_m: float | None,
+        price_out_per_m: float | None,
+    ) -> dict:
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO llm_config (scope, model, api_key_enc, key_hint, price_in_per_m, price_out_per_m, "
+                "last_test_ok, last_test_error, last_test_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1, NULL, ?, ?) "
+                "ON CONFLICT(scope) DO UPDATE SET model = excluded.model, api_key_enc = excluded.api_key_enc, "
+                "key_hint = excluded.key_hint, price_in_per_m = excluded.price_in_per_m, "
+                "price_out_per_m = excluded.price_out_per_m, last_test_ok = 1, last_test_error = NULL, "
+                "last_test_at = excluded.last_test_at, updated_at = excluded.updated_at",
+                (scope, model, api_key_enc, key_hint, price_in_per_m, price_out_per_m, now, now),
+            )
+        return self.llm_config(scope) or {}
+
+    def record_llm_failure(self, scope: str, error: str) -> None:
+        """A call with the saved configuration failed (invalid key, quota...):
+        the status banner turns red until the next successful test."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE llm_config SET last_test_ok = 0, last_test_error = ?, last_test_at = ? WHERE scope = ?",
+                (error[:500], time.time(), scope),
+            )
+
+    def delete_llm_config(self, scope: str) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM llm_config WHERE scope = ?", (scope,))
+
+    def repo_users(self, owner: str, repo: str) -> list[int]:
+        """Users who added ``owner/repo``, first added first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT github_id FROM user_repos WHERE owner = ? AND repo = ? ORDER BY added_at, github_id",
+                (owner, repo),
+            ).fetchall()
+        return [int(r["github_id"]) for r in rows]
+
+    # -- proposal updates (regeneration, edits, cost) ------------------------------------
+
+    def update_proposal(self, short_id: str, **values: object) -> None:
+        unknown = set(values) - _UPDATABLE
+        if unknown:
+            raise ValueError(f"Unknown proposal fields: {sorted(unknown)}")
+        if not values:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                f"UPDATE review_requests SET {', '.join(f'{k} = ?' for k in values)} WHERE short_id = ?",
+                (*values.values(), short_id),
+            )
+
+    def add_proposal_cost(self, short_id: str, cost_usd: float) -> None:
+        if not cost_usd:
+            return
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE review_requests SET cost_usd = COALESCE(cost_usd, 0) + ? WHERE short_id = ?",
+                (cost_usd, short_id),
+            )
+
+    def pending_queue(self, visible: Iterable[str] | None = None) -> list[ReviewRequest]:
+        """Every pending proposal, oldest first: the "To review" queue."""
+        where, params = _visible_clause(visible)
+        clause = f"resolved = 0 AND {where}" if where else "resolved = 0"
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"SELECT * FROM review_requests WHERE {clause} ORDER BY created_at, short_id", params
+            ).fetchall()
+        return [self._to_request(r) for r in rows]
+
+    def pr_cost_usd(self, owner: str, repo: str, pr_number: int) -> float:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(cost_usd), 0) AS c FROM llm_usage "
+                "WHERE owner = ? AND repo = ? AND pr_number = ?",
+                (owner, repo, pr_number),
+            ).fetchone()
+        return round(float(row["c"]), 6)
+
+    def monthly_costs(self, visible: Iterable[str] | None = None, months: int = 6) -> list[dict]:
+        """LLM cost per calendar month (UTC), most recent last."""
+        where, params = _visible_clause(visible)
+        where = f"WHERE {where}" if where else ""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT strftime('%Y-%m', created_at, 'unixepoch') AS month, SUM(cost_usd) AS cost, "
+                f"SUM(calls) AS calls FROM llm_usage {where} GROUP BY month ORDER BY month DESC LIMIT ?",
+                (*params, months),
+            ).fetchall()
+        return [
+            {"month": r["month"], "cost_usd": round(r["cost"] or 0.0, 4), "calls": r["calls"] or 0}
+            for r in reversed(rows)
+        ]
 
     # -- learning from decisions ------------------------------------------------------
 

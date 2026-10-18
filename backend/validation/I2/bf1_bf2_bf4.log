@@ -1,0 +1,12 @@
+Date      : 2026-10-18 15:24:01 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/validate_requirements.py BF1 BF2 BF4
+----------------------------------------------------------------
+BF1   OK     Configure the provider, the model and the API key (kept, never shown)  [7 passed, 232 deselected in 3.02s]
+BF2   OK     Test the connection before saving; a refused key saves nothing  [2 passed, 237 deselected in 2.86s]
+BF4   OK     One detection on the whole Javadoc: exact rules OR the model, with an explanation  [9 passed, 230 deselected in 1.59s]
+
+3/3 functional requirements validated.
+Code de sortie : 0

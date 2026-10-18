@@ -1,0 +1,29 @@
+Date      : 2026-10-18 14:35:20 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python -m pytest tests/test_core.py -v -o addopts=
+----------------------------------------------------------------
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-9.1.1, pluggy-1.6.0 -- /home/nasser/Projects/docdebt-guardian/docdebt-guardian/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/nasser/Projects/docdebt-guardian/docdebt-guardian/backend
+configfile: pyproject.toml
+plugins: langsmith-0.14.11, anyio-4.15.1
+collecting ... collected 12 items
+
+tests/test_core.py::test_parse_methods_signature_and_javadoc PASSED      [  8%]
+tests/test_core.py::test_bodiless_method_does_not_swallow_next_method PASSED [ 16%]
+tests/test_core.py::test_varargs_arrays_generics_nested_and_interface PASSED [ 25%]
+tests/test_core.py::test_snippet_and_research_compatible_signature PASSED [ 33%]
+tests/test_core.py::test_invoked_names PASSED                            [ 41%]
+tests/test_core.py::test_parse_javadoc_matches_research_behaviour PASSED [ 50%]
+tests/test_core.py::test_auditor_rules PASSED                            [ 58%]
+tests/test_core.py::test_auditor_warnings_never_count_as_debt PASSED     [ 66%]
+tests/test_core.py::test_diff_changed_lines PASSED                       [ 75%]
+tests/test_core.py::test_extractor_from_diff PASSED                      [ 83%]
+tests/test_core.py::test_extractor_filters PASSED                        [ 91%]
+tests/test_core.py::test_explicit_paths_are_never_skipped_silently PASSED [100%]
+
+============================== 12 passed in 0.07s ==============================
+Code de sortie : 0

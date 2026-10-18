@@ -1,46 +1,57 @@
 """Build the retrieved context for one method, and remember what was used.
 
-Sources (each can be switched off):
+Always on, for detection and repair alike, in two parts:
 
-* ``siblings``: the two documented methods of the same file closest to the
-  target (the source that improved meaning the most in the research);
-* ``callees``: documented methods of the same file the target calls;
-* ``similar``: the most similar debt-free documented methods of the whole
-  repository (knowledge base);
-* ``validated``: the closest Javadoc a reviewer accepted before;
-* ``tests``: a test method that calls the target;
-* ``readme``: the README section closest to the method.
+1. **Siblings** (the best context of the research): up to three documented
+   methods of the same file, the closest to the target first. Read from the
+   file under review, no index needed.
+2. **Hybrid search** in the repository's knowledge base (debt-free
+   documented methods, tests, README sections, accepted fixes): the BM25
+   ranking and the vector ranking (``all-MiniLM-L6-v2``, Chroma) are merged
+   by Reciprocal Rank Fusion, ``score = sum(1 / (60 + rank))``. Fusion uses
+   ranks, never raw scores, so there is no similarity threshold to tune.
+   The top four are kept.
+
+Determinism: fixed sizes (3 siblings, top 4, 700 characters per excerpt,
+3,600 in total), and ties broken by line distance (siblings) or chunk id
+(search). The same index and the same method always give the same context.
 
 Leak guard, as in the research: no excerpt about a method with the target's
 own name (the method itself, its overloads, same-name methods elsewhere)
 ever enters the context, and commit messages are never used.
 
-Every excerpt is returned with its source, location and score, so the
-dashboard can show exactly what the model was given.
+Every excerpt is returned with its source, rank and fused score, so the
+proposal page shows exactly what the model was given.
 """
 
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass, field
 
-from docdebt.core.java_parser import invoked_method_names, parse_java_source
+from docdebt.core.java_parser import parse_java_source
 from docdebt.core.models import MethodUnit
-from docdebt.rag.embeddings import Embedder, EmbeddingError, bm25_scores, cosine
+from docdebt.rag.embeddings import Embedder, EmbeddingError, bm25_scores_tokens, tokenize
 from docdebt.rag.knowledge import Chunk, KnowledgeBase
 
-SOURCES = ("siblings", "callees", "similar", "validated", "tests", "readme")
-DEFAULT_SOURCES = ("siblings", "callees", "similar", "validated")
+logger = logging.getLogger("docdebt.rag")
+
+SOURCES = ("siblings", "similar", "tests", "readme", "validated")
+RRF_K = 60
+TOP_K = 4
+MAX_SIBLINGS = 3
+_DENSE_CANDIDATES = 50
 _TRIVIAL = re.compile(r"^(get|set|is)[A-Z_]")
 _ITEM_CHARS = 700
 _TOTAL_CHARS = 3600
 
+_KIND_SOURCE = {"method": "similar", "test": "tests", "readme": "readme", "validated": "validated"}
 _TITLES = {
     "siblings": "Documented method in the same file",
-    "callees": "Method called by this one",
     "similar": "Similar documented method in the project",
     "validated": "Javadoc a reviewer accepted in this project",
-    "tests": "Test that calls this method",
+    "tests": "Test of the project",
     "readme": "README excerpt",
 }
 
@@ -52,13 +63,19 @@ class ContextItem:
     path: str
     score: float | None
     text: str
+    rank: int = 0
+    lexical_rank: int | None = None
+    dense_rank: int | None = None
 
     def to_dict(self) -> dict:
         return {
             "source": self.source,
             "label": self.label,
             "path": self.path,
-            "score": None if self.score is None else round(self.score, 3),
+            "score": None if self.score is None else round(self.score, 5),
+            "rank": self.rank,
+            "lexical_rank": self.lexical_rank,
+            "dense_rank": self.dense_rank,
             "text": self.text,
         }
 
@@ -85,6 +102,38 @@ def _trivial(unit: MethodUnit) -> bool:
     return bool(_TRIVIAL.match(unit.name)) and body.count(";") <= 1
 
 
+def rrf_fuse(rankings: list[list[int]], k: int = RRF_K) -> list[tuple[int, float]]:
+    """Reciprocal Rank Fusion of several rankings of chunk ids (best first).
+
+    Returns ``(id, score)`` pairs, best first; equal scores are ordered by id.
+    """
+    scores: dict[int, float] = {}
+    for ranking in rankings:
+        for rank, chunk_id in enumerate(ranking, start=1):
+            scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (k + rank)
+    return sorted(scores.items(), key=lambda p: (-round(p[1], 12), p[0]))
+
+
+def siblings_of(unit: MethodUnit, file_source: str | None, limit: int = MAX_SIBLINGS) -> list[ContextItem]:
+    """The documented methods of the same file closest to ``unit`` (leak guard applied)."""
+    if not file_source:
+        return []
+    methods = parse_java_source(file_source, unit.file_path)
+    candidates = [m for m in methods if m.name != unit.name and m.javadoc and m.has_body and not _trivial(m)]
+    candidates.sort(key=lambda m: (abs(m.start_line - unit.start_line), m.start_line))
+    return [
+        ContextItem(
+            "siblings",
+            f"{m.class_name}.{m.name}",
+            m.file_path,
+            None,
+            f"{m.javadoc}\n{m.code}"[:_ITEM_CHARS],
+            rank=i + 1,
+        )
+        for i, m in enumerate(candidates[:limit])
+    ]
+
+
 class RagProvider:
     """Context for the methods of one repository during one review.
 
@@ -98,19 +147,17 @@ class RagProvider:
         owner: str,
         repo: str,
         *,
-        sources: tuple[str, ...] = DEFAULT_SOURCES,
-        top_k: int = 2,
         embedder: Embedder | None = None,
+        top_k: int = TOP_K,
+        max_siblings: int = MAX_SIBLINGS,
     ) -> None:
-        unknown = set(sources) - set(SOURCES)
-        if unknown:
-            raise ValueError(f"Unknown context sources {sorted(unknown)}. Valid: {SOURCES}.")
         self.kb, self.owner, self.repo = kb, owner, repo
-        self.sources = tuple(sources)
-        self.top_k = max(1, top_k)
         self.embedder = embedder
+        self.top_k = top_k
+        self.max_siblings = max_siblings
         self.files: dict[str, str] = {}
         self._chunks: list[Chunk] | None = None
+        self._tokens: dict[int, list[str]] = {}
         self._cache: dict[str, RetrievedContext] = {}
 
     def set_files(self, files: dict[str, str]) -> None:
@@ -118,85 +165,82 @@ class RagProvider:
         self.files = dict(files)
         self._cache.clear()
 
-    # -- sources -------------------------------------------------------------
-
-    def _file_methods(self, unit: MethodUnit) -> list[MethodUnit]:
-        source = self.files.get(unit.file_path)
-        return parse_java_source(source, unit.file_path) if source else []
-
-    def _siblings(self, unit: MethodUnit, methods: list[MethodUnit]) -> list[ContextItem]:
-        candidates = [m for m in methods if m.name != unit.name and m.javadoc and m.has_body and not _trivial(m)]
-        candidates.sort(key=lambda m: abs(m.start_line - unit.start_line))
-        return [
-            ContextItem(
-                "siblings", f"{m.class_name}.{m.name}", m.file_path, None, f"{m.javadoc}\n{m.code}"[:_ITEM_CHARS]
-            )
-            for m in candidates[:2]
-        ]
-
-    def _callees(self, unit: MethodUnit, methods: list[MethodUnit]) -> list[ContextItem]:
-        called = invoked_method_names(unit.code) - {unit.name}  # leak guard
-        return [
-            ContextItem(
-                "callees", f"{m.class_name}.{m.name}", m.file_path, None, f"{m.javadoc}\n{m.code}"[:_ITEM_CHARS]
-            )
-            for m in methods
-            if m.name in called and m.javadoc
-        ][:2]
+    # -- hybrid search ---------------------------------------------------------
 
     def _kb_chunks(self) -> list[Chunk]:
         if self._chunks is None:
             self._chunks = self.kb.chunks(self.owner, self.repo) if self.kb is not None else []
+            self._chunks.sort(key=lambda c: c.id)
+            self._tokens = {c.id: tokenize(c.text) for c in self._chunks}
         return self._chunks
 
-    def _rank(self, query: str, chunks: list[Chunk]) -> list[tuple[float, Chunk]]:
-        if not chunks:
+    @staticmethod
+    def query_text(unit: MethodUnit) -> str:
+        return f"{unit.class_name} {unit.name}\n{unit.code[:600]}"
+
+    def _lexical(self, query: str, candidates: list[Chunk]) -> list[int]:
+        scores = bm25_scores_tokens(tokenize(query), [self._tokens[c.id] for c in candidates])
+        ranked = sorted(
+            ((s, c.id) for s, c in zip(scores, candidates, strict=True) if s > 0), key=lambda p: (-p[0], p[1])
+        )
+        return [chunk_id for _, chunk_id in ranked]
+
+    def _dense(self, query: str, allowed: set[int]) -> list[int]:
+        if self.embedder is None or self.kb is None or not allowed:
             return []
-        if self.embedder is not None and all(c.vector and c.embedder == self.embedder.name for c in chunks):
-            try:
-                q = self.embedder.embed([query])[0]
-                scored = [(cosine(q, c.vector or []), c) for c in chunks]
-                return sorted(scored, key=lambda p: p[0], reverse=True)
-            except EmbeddingError:
-                pass
-        scores = bm25_scores(query, [c.text for c in chunks])
-        return sorted(zip(scores, chunks, strict=True), key=lambda p: p[0], reverse=True)
+        try:
+            vector = self.embedder.embed([query])[0]
+            hits = self.kb.index.query(self.owner, self.repo, vector, _DENSE_CANDIDATES + 10)
+        except EmbeddingError as exc:
+            logger.warning("vector search skipped (%s): BM25 only for this method", exc)
+            return []
+        except Exception:  # noqa: BLE001 - a broken index must not stop a review
+            logger.exception("vector search failed: BM25 only for this method")
+            return []
+        return [chunk_id for chunk_id, _ in hits if chunk_id in allowed][:_DENSE_CANDIDATES]
 
-    def _from_kb(self, unit: MethodUnit, kind: str, source: str, k: int) -> list[ContextItem]:
-        chunks = [c for c in self._kb_chunks() if c.kind == kind and c.name != unit.name]  # leak guard
-        if kind == "test":
-            chunks = [c for c in chunks if unit.name in c.extra.split()]
-        query = f"{unit.class_name} {unit.name} {unit.code[:600]}"
-        ranked = [(s, c) for s, c in self._rank(query, chunks) if s > 0]
-        return [ContextItem(source, c.label, c.path, s, c.text[:_ITEM_CHARS]) for s, c in ranked[:k]]
+    def search(self, unit: MethodUnit, exclude: set[tuple[str, str]] | None = None) -> list[ContextItem]:
+        """The top ``top_k`` chunks of the knowledge base for ``unit``, by RRF."""
+        exclude = exclude or set()
+        candidates = [
+            c
+            for c in self._kb_chunks()
+            if c.name != unit.name  # leak guard: the method itself, its overloads, same-name methods
+            and (c.path, c.label) not in exclude
+        ]
+        if not candidates:
+            return []
+        query = self.query_text(unit)
+        lexical = self._lexical(query, candidates)
+        dense = self._dense(query, {c.id for c in candidates})
+        by_id = {c.id: c for c in candidates}
+        lex_rank = {cid: i + 1 for i, cid in enumerate(lexical)}
+        dense_rank = {cid: i + 1 for i, cid in enumerate(dense)}
+        items = []
+        for position, (chunk_id, score) in enumerate(rrf_fuse([lexical, dense])[: self.top_k], start=1):
+            c = by_id[chunk_id]
+            items.append(
+                ContextItem(
+                    _KIND_SOURCE.get(c.kind, "similar"),
+                    c.label,
+                    c.path,
+                    score,
+                    c.text[:_ITEM_CHARS],
+                    rank=position,
+                    lexical_rank=lex_rank.get(chunk_id),
+                    dense_rank=dense_rank.get(chunk_id),
+                )
+            )
+        return items
 
-    # -- public --------------------------------------------------------------
+    # -- public ------------------------------------------------------------------
 
     def build(self, unit: MethodUnit) -> RetrievedContext:
         if unit.id in self._cache:
             return self._cache[unit.id]
-        methods = self._file_methods(unit) if {"siblings", "callees"} & set(self.sources) else []
-        items: list[ContextItem] = []
-        # Called methods first: what the method relies on explains it best.
-        if "callees" in self.sources:
-            items += self._callees(unit, methods)
-        if "siblings" in self.sources:
-            seen = {(i.path, i.label) for i in items}
-            items += [i for i in self._siblings(unit, methods) if (i.path, i.label) not in seen]
-        if "validated" in self.sources:
-            items += self._from_kb(unit, "validated", "validated", 1)
-        if "similar" in self.sources:
-            seen = {(i.path, i.label) for i in items}
-            items += [
-                i
-                for i in self._from_kb(unit, "method", "similar", self.top_k + 2)
-                if (i.path, i.label) not in seen
-            ][: self.top_k]
-        if "tests" in self.sources:
-            items += self._from_kb(unit, "test", "tests", 1)
-        if "readme" in self.sources:
-            items += self._from_kb(unit, "readme", "readme", 1)
-        context = RetrievedContext(items)
+        siblings = siblings_of(unit, self.files.get(unit.file_path), self.max_siblings)
+        found = self.search(unit, exclude={(i.path, i.label) for i in siblings})
+        context = RetrievedContext(siblings + found)
         self._cache[unit.id] = context
         return context
 

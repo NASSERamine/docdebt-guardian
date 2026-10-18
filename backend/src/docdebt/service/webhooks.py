@@ -151,3 +151,45 @@ def parse_comment_event(payload: dict) -> CommentEvent | None:
         is_pull_request="pull_request" in issue,
         author_type=comment.get("user", {}).get("type", "User"),
     )
+
+
+@dataclass(frozen=True)
+class PushEvent:
+    """A push to the repository's default branch (other branches are ignored)."""
+
+    owner: str
+    repo: str
+    after_sha: str
+    changed: list[str]  # added or modified paths
+    removed: list[str]
+    installation_id: str
+
+
+def parse_push_event(payload: dict) -> PushEvent | None:
+    """The push to index, or ``None`` (another branch, a deleted branch, no installation)."""
+    repository = payload.get("repository") or {}
+    default = repository.get("default_branch")
+    if not default or payload.get("ref") != f"refs/heads/{default}" or payload.get("deleted"):
+        return None
+    installation = (payload.get("installation") or {}).get("id")
+    after = payload.get("after")
+    if installation is None or not after or set(after) == {"0"}:
+        return None
+    changed: set[str] = set()
+    removed: set[str] = set()
+    for commit in payload.get("commits") or []:
+        for path in (commit.get("added") or []) + (commit.get("modified") or []):
+            changed.add(path)
+            removed.discard(path)
+        for path in commit.get("removed") or []:
+            removed.add(path)
+            changed.discard(path)
+    owner = (repository.get("owner") or {}).get("login") or (repository.get("owner") or {}).get("name")
+    return PushEvent(
+        owner=owner or "",
+        repo=repository.get("name") or "",
+        after_sha=after,
+        changed=sorted(changed),
+        removed=sorted(removed),
+        installation_id=str(installation),
+    )

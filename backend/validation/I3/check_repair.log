@@ -1,0 +1,75 @@
+Date      : 2026-10-18 15:50:45 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/check_model.py --model gpt-5.6-luna --price-in 1.25 --price-out 10 --repair --json validation/I3/check_repair.json
+----------------------------------------------------------------
+Model      : gpt-5.6-luna (OpenAI), key ...tvkA
+Prompt     : screened in the research
+Connection : OK
+
+--- toCelsius: exact rule (phantom @param)
+Expected   : debt
+Obtained   : debt  OK
+Rules      : missing-param, unknown-param
+Model      : INCOMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Explanation: [@param tempInCelsius] The documentation names the parameter tempInCelsius, but the method declares it as tempInKelvin. (found word for word)
+  doc  : @param tempInCelsius temperature in kelvin
+  code : public double toCelsius(double tempInKelvin) {
+Calls/cost : 2 call(s), $0.004032
+Repair     : replacement: verified, exact rules pass, 1 call(s), $0.001031
+    /**
+         * Converts kelvin to celsius.
+         * @param tempInKelvin temperature in kelvin
+         * @return temperature in celsius
+         */
+Repair     : regeneration: verified, exact rules pass, 1 call(s), $0.001471
+             (regeneration wording: zero-shot 0, not screened for this model in the research)
+    /**
+         * Converts kelvin to celsius.
+         * @param tempInKelvin temperature in kelvin
+         * @return temperature in celsius
+         */
+
+--- pick: model only (description contradicted by the code)
+Expected   : debt
+Obtained   : debt  OK
+Rules      : none
+Model      : INCOMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Explanation: [description] The method returns the minimum of the two values, not the maximum. (found word for word)
+  doc  : Returns the maximum of the two values.
+  code : return Math.min(a, b);
+Explanation: [@return] The returned value is the smaller of a and b, not the larger. (found word for word)
+  doc  : @return the larger of a and b
+  code : return Math.min(a, b);
+Calls/cost : 2 call(s), $0.002942
+Repair     : replacement: verified, exact rules pass, 1 call(s), $0.000847
+    /**
+         * Returns the minimum of the two values.
+         * @param a first value
+         * @param b second value
+         * @return the smaller of a and b
+         */
+Repair     : regeneration: verified, exact rules pass, 1 call(s), $0.000751
+             (regeneration wording: zero-shot 0, not screened for this model in the research)
+    /**
+         * Returns the minimum of the two values.
+         * @param a first value
+         * @param b second value
+         * @return the smaller of a and b
+         */
+
+--- add: correct documentation
+Expected   : clean
+Obtained   : clean  OK
+Rules      : none
+Model      : COMPLETE
+Prompt     : detect/zeroshot/w0/aed96cbc
+Calls/cost : 1 call(s), $0.000386
+
+Total      : 9 call(s), 2730 input / 805 output tokens, $0.011462
+Result     : 3/3 verdict(s) as expected
+Repairs    : 4/4 verified and passing the exact rules
+Code de sortie : 0

@@ -51,6 +51,7 @@ class DocDebtState(TypedDict):
     detection_model: NotRequired[str | None]
     detection_confidence: NotRequired[float | None]
     semantic_findings: NotRequired[list[dict]]
+    detection_error: NotRequired[str | None]  # the model could not be called (key, quota, network)
 
     repair_status: NotRequired[str]  # docdebt.repair.repairer.RepairStatus
     repair_reason: NotRequired[str]

@@ -3,7 +3,7 @@
 from docdebt.core.java_parser import parse_java_source
 from docdebt.rag.embeddings import bm25_scores, choose_embedder, cosine, tokenize
 from docdebt.rag.knowledge import KnowledgeBase, find_readme
-from docdebt.rag.retriever import RagProvider
+from docdebt.rag.retriever import RagProvider, rrf_fuse
 
 MAIN = """package demo;
 
@@ -73,7 +73,7 @@ public class AccountTest {
 README = "# Demo\nA bank account library.\n# Amounts\nAll amounts are expressed in cents, never in euros."
 
 
-def kb_with_files(tmp_path):
+def kb_with_files(tmp_path, embedder=None):
     kb = KnowledgeBase(tmp_path / "state.sqlite3")
     kb.rebuild(
         "acme",
@@ -85,6 +85,7 @@ def kb_with_files(tmp_path):
         },
         readme=README,
         commit_sha="abc",
+        embedder=embedder,
     )
     return kb
 
@@ -120,59 +121,127 @@ def test_rebuild_keeps_validated_chunks(tmp_path):
     assert kb.stats("acme", "bank")["counts"]["readme"] == 0
 
 
-def test_siblings_and_callees_come_from_the_file_under_review(tmp_path):
-    rag = RagProvider(None, "acme", "bank", sources=("siblings", "callees"))
+class WordEmbedder:
+    """A deterministic stand-in for MiniLM: one dimension per vocabulary word."""
+
+    name = "test:words"
+    VOCAB = ("deposit", "withdraw", "money", "cent", "fee", "balance", "transfer", "audit", "coin", "account")
+
+    def embed(self, texts):
+        out = []
+        for text in texts:
+            words = tokenize(text)
+            out.append([float(words.count(w)) + 0.01 for w in self.VOCAB])
+        return out
+
+
+def test_siblings_are_the_three_closest_documented_methods_of_the_file():
+    rag = RagProvider(None, "acme", "bank")
     rag.set_files({"src/main/java/demo/Account.java": MAIN})
     items = rag.build(unit("withdraw")).items
-    labels = [(i.source, i.label) for i in items]
-    assert ("callees", "Account.audit") in labels
-    assert all(label != "Account.withdraw" for _, label in labels)  # never the method itself
-    assert all(label != "Account.getBalance" for _, label in labels)  # trivial getter skipped
-    assert len([i for i in items if i.source == "siblings"]) >= 1
+    siblings = [i for i in items if i.source == "siblings"]
+    assert {i.label for i in siblings} == {"Account.deposit", "Account.audit", "Account.transfer"}
+    assert siblings[-1].label == "Account.transfer"  # the farthest of the three
+    assert [i.rank for i in siblings] == [1, 2, 3]
+    labels = {i.label for i in items}
+    assert "Account.withdraw" not in labels  # never the method itself
+    assert "Account.getBalance" not in labels  # trivial getter skipped
 
 
-def test_similar_methods_come_from_the_whole_project_with_the_leak_guard(tmp_path):
+def test_rrf_fuses_ranks_and_breaks_ties_by_id():
+    fused = rrf_fuse([[3, 1, 2], [1, 4]])
+    assert [cid for cid, _ in fused] == [1, 3, 4, 2]
+    assert fused[0][1] == 1 / 61 + 1 / 62
+    assert rrf_fuse([[5], [7]]) == [(5, 1 / 61), (7, 1 / 61)]  # equal scores: lower id first
+
+
+def test_hybrid_search_uses_bm25_and_vectors_with_the_leak_guard(tmp_path):
+    kb = kb_with_files(tmp_path, embedder=WordEmbedder())
+    assert kb.stats("acme", "bank")["embedder"] == "test:words"
+    rag = RagProvider(kb, "acme", "bank", embedder=WordEmbedder())
+    items = [i for i in rag.build(unit("withdraw")).items if i.source != "siblings"]
+    assert 0 < len(items) <= 4
+    assert all(not i.label.endswith(".withdraw") for i in items)  # Wallet.withdraw: same name, excluded
+    assert all(i.dense_rank is not None or i.lexical_rank is not None for i in items)
+    assert [i.rank for i in items] == list(range(1, len(items) + 1))
+    assert items[0].score >= items[-1].score
+
+
+def test_bm25_alone_when_no_embedder(tmp_path):
     kb = kb_with_files(tmp_path)
-    rag = RagProvider(kb, "acme", "bank", sources=("similar",), top_k=2)
-    items = rag.build(unit("deposit")).items
-    assert items and all(i.source == "similar" and i.score > 0 for i in items)
+    rag = RagProvider(kb, "acme", "bank")
+    items = [i for i in rag.build(unit("deposit")).items if i.source != "siblings"]
+    assert items and all(i.dense_rank is None and i.lexical_rank is not None for i in items)
     assert all(not i.label.endswith(".deposit") for i in items)
-    # Wallet.withdraw has the same name as Account.withdraw: excluded for it (leak guard)
-    withdraw_items = rag.build(unit("withdraw")).items
-    assert all(not i.label.endswith(".withdraw") for i in withdraw_items)
 
 
-def test_tests_readme_and_validated_sources(tmp_path):
+def test_tests_readme_and_validated_chunks_compete_in_the_search(tmp_path):
     kb = kb_with_files(tmp_path)
     kb.add_validated(
-        "acme", "bank", unit("withFee", OTHER, "src/main/java/demo/Wallet.java"), "/** Fee in cents. */"
+        "acme", "bank", unit("withFee", OTHER, "src/main/java/demo/Wallet.java"), "/** Deposit fee in cents. */"
     )
-    rag = RagProvider(kb, "acme", "bank", sources=("tests", "readme", "validated"))
-    by_source = {i.source: i for i in rag.build(unit("deposit")).items}
-    assert by_source["tests"].label == "AccountTest.depositAddsMoney"
-    assert "cents" in by_source["readme"].text
-    assert by_source["validated"].label == "Wallet.withFee"
+    rag = RagProvider(kb, "acme", "bank", top_k=10)
+    sources = {i.source: i for i in rag.build(unit("deposit")).items}
+    assert sources["tests"].label == "AccountTest.depositAddsMoney"
+    assert "cents" in sources["readme"].text
+    assert sources["validated"].label == "Wallet.withFee"
+
+
+def test_same_index_same_method_same_context(tmp_path):
+    kb = kb_with_files(tmp_path, embedder=WordEmbedder())
+    first = RagProvider(kb, "acme", "bank", embedder=WordEmbedder())
+    second = RagProvider(kb, "acme", "bank", embedder=WordEmbedder())
+    for rag in (first, second):
+        rag.set_files({"src/main/java/demo/Account.java": MAIN})
+    assert [i.to_dict() for i in first.build(unit("transfer")).items] == [
+        i.to_dict() for i in second.build(unit("transfer")).items
+    ]
 
 
 def test_context_text_names_each_source_and_stays_within_budget(tmp_path):
     kb = kb_with_files(tmp_path)
-    rag = RagProvider(kb, "acme", "bank", sources=("siblings", "similar"))
+    rag = RagProvider(kb, "acme", "bank")
     rag.set_files({"src/main/java/demo/Account.java": MAIN})
     text = rag(unit("transfer"))
-    assert "Documented method in the same file" in text and "Similar documented method" in text
+    assert "Documented method in the same file" in text
     assert len(text) < 4000
     assert rag.build(unit("transfer")) is rag.build(unit("transfer"))  # cached per review
 
 
-def test_unknown_source_is_rejected_and_readme_is_found():
+def test_a_push_updates_only_the_changed_files(tmp_path):
+    kb = kb_with_files(tmp_path, embedder=WordEmbedder())
+    before = {c.name for c in kb.chunks("acme", "bank", ["method"])}
+    assert "withFee" in before
+    changed = OTHER.replace("withFee", "withCharge")
+    kb.update_files(
+        "acme", "bank", {"src/main/java/demo/Wallet.java": changed}, [], embedder=WordEmbedder(), commit_sha="def"
+    )
+    after = {c.name for c in kb.chunks("acme", "bank", ["method"])}
+    assert "withCharge" in after and "withFee" not in after and "deposit" in after
+    assert kb.stats("acme", "bank")["commit_sha"] == "def"
+    kb.update_files("acme", "bank", {}, ["src/main/java/demo/Wallet.java"])
+    assert "withCharge" not in {c.name for c in kb.chunks("acme", "bank", ["method"])}
+
+
+def test_chroma_index_answers_like_the_exact_index(tmp_path):
     import pytest
 
-    with pytest.raises(ValueError):
-        RagProvider(None, "a", "b", sources=("commits",))
+    pytest.importorskip("chromadb")
+    from docdebt.rag.vectors import ChromaIndex
+
+    kb = KnowledgeBase(tmp_path / "state.sqlite3", index=ChromaIndex(tmp_path / "chroma"))
+    kb.rebuild("acme", "bank", {"src/main/java/demo/Account.java": MAIN}, embedder=WordEmbedder())
+    query = WordEmbedder().embed(["withdraw money"])[0]
+    hits = kb.index.query("acme", "bank", query, 3)
+    names = {c.id: c.name for c in kb.chunks("acme", "bank")}
+    assert names[hits[0][0]] == "withdraw"
+    assert kb.index.query("other", "repo", query, 3) == []  # one repository never sees another's chunks
+
+
+def test_readme_is_found():
     assert find_readme(["docs/README.md", "README.md", "src/A.java"]) == "README.md"
     assert find_readme(["src/A.java"]) is None
 
 
-def test_bm25_mode_needs_no_embedding_server():
+def test_bm25_mode_needs_no_embedding_model():
     assert choose_embedder("bm25") is None
-    assert choose_embedder("openai", allow_cloud=False) is None

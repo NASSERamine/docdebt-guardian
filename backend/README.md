@@ -36,8 +36,8 @@ context closing instruction no longer asks CoT prompts for a single word.
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev,bench]"          # add ,openai when you move to GPT-5.6, ,service for the GitHub App
-pytest                                 # 117 tests, no model needed
+pip install -e ".[dev,bench]"          # add ,service,rag for the GitHub App
+pytest                                 # 239 tests, no model needed
 ```
 
 `tree-sitter` is pinned below 0.26: version 0.26.0 crashed (segmentation
@@ -306,53 +306,88 @@ internet. Real GitHub webhooks (a PR opened on a repo you connected) still
 need `cloudflared` pointed at port 8000, exactly as in "GitHub App service"
 below — the dashboard does not change that part.
 
-## Service v2: cascade, hybrid repair, RAG, check run, health, learning
+## Service v3: the model of your choice, one detection, retrieval always on
 
-**Local -> cloud cascade.** The local model (`DOCDEBT_LOCAL_MODEL`, Ollama)
-answers first. `DOCDEBT_CLOUD_MODEL` (e.g. `gpt-5.6-luna`, with
-`OPENAI_API_KEY`) is asked only when the local model fails or is not
-confident enough, only on repositories whose policy allows it (repository
-page -> *Repository policy*, off by default) and within the cost cap.
-`gpt-5.6-luna` reuses the detection prompts screened on `gpt-5.6`; its
-repairs always use the hybrid mechanism.
+```bash
+pip install -e ".[service,rag]"    # the 3 providers (OpenAI, Anthropic, Google), MiniLM and Chroma
+```
 
-**Hybrid repair** (`docdebt.repair`, default). The research pipeline in four
-layers: (1) a deterministic structural plan (renamed parameters keep their
-text, phantom tags are deleted), (2) semantic triage, (3) a small JSON prompt
-where the model only writes missing fields and judges disputed ones,
-(4) post-validation that reverts invented identifiers, cosmetic edits and
-deletion-only changes, then a span patch that keeps every untouched line
-byte-identical. The proposal page shows what layer 4 kept or reverted.
-`DOCDEBT_REPAIR_MECHANISM=regeneration` brings back whole-block regeneration.
+**Model (dashboard -> *Model*).** One model, chosen from a closed list:
+`gpt-5.6-luna` (default), `gpt-5.6`, `claude-sonnet-5`, `gemini-3.1-pro`.
+Paste the provider's API key: it is tested with one short call before it is
+saved, stored encrypted (Fernet) and never sent back (only its last 4
+characters are shown). The key belongs to the person who saved it; a
+repository's reviews use the key of its first user who configured one. The
+encryption key is `DOCDEBT_SECRET_KEY`, or a file generated on the first run
+in `.docdebt-service/secret.key` (keep it: without it, saved API keys must be
+typed again). Local Ollama models remain for the research scripts only
+(`pip install -e ".[local]"`). `gemini-3.1-pro` was not part of the prompt
+screening: it uses zero-shot wording 0, and the dashboard says so.
 
-**Knowledge base (RAG).** One per repository, in the state database:
-documented methods without structural debt, tests, README sections, and
-every fix a reviewer accepted. For each method, the most relevant excerpts
-(same file, called methods, similar methods, accepted fixes, tests, README)
-are given to the model as reference only; the proposal page lists them.
-Ranking uses Ollama embeddings (`ollama pull nomic-embed-text`) when
-available, BM25 otherwise. Sources and amount: dashboard *Settings*.
+**Detection.** A method is in debt when an exact rule fails (`@param`,
+`@return`, `@throws`) **or** the model, asked once at temperature 0 about the
+whole Javadoc, says it no longer matches the code. The model explains each
+disputed field; the proposal page shows the explanation. No votes, no
+confidence threshold, no cascade.
 
-**Documentation health.** *Analyse the default branch* on a repository page
-scans the default branch (deterministic, no LLM, no cost): share of public
-and protected methods documented without structural debt, trend, least
-healthy packages and files. The same scan rebuilds the knowledge base.
+**Retrieval (RAG), always on, for detection and repair.** One knowledge base
+per repository: documented methods without debt, tests, README sections and
+every fix a reviewer accepted. For each method: up to 3 documented methods of
+the same file first, then the top 4 of the knowledge base by Reciprocal Rank
+Fusion (k = 60) of BM25 and all-MiniLM-L6-v2 vectors (computed locally,
+stored in an embedded Chroma index), within 3,600 characters (700 per
+excerpt). The method itself and same-name methods are never retrieved (leak
+guard). MiniLM is downloaded on the first run (internet needed once); if it
+is unavailable, retrieval falls back to BM25 and the status banner says so.
+`DOCDEBT_RAG_EMBEDDINGS=bm25` forces BM25 only.
 
-**Check run.** Each review publishes a `DocDebt Guardian` check run on the
-PR's head commit, with an annotation at each Javadoc in debt. With *Block the
-merge on structural debt* on, it fails while structural debt is pending; make
-it a required check in the branch protection rules to block merging.
-**Permission change required:** on the App's page -> *Permissions & events*
--> **Checks: Read and write** -> *Save changes*, then approve the new
-permission on each installation. Without it reviews still work; the check run
-is skipped (logged once).
+**Index.** *Analyse the default branch* on a repository page measures the
+documentation health (no LLM, no cost) and rebuilds the index. Every push to
+the default branch then re-indexes only the changed files. **GitHub App
+setting required:** *Permissions & events* -> *Subscribe to events* -> tick
+**Push** -> *Save changes*.
 
-**Learning from decisions.** Rejecting asks *why* (false positive, incorrect
-fix, I'll fix it myself, other); `/docdebt reject <id> false-positive` works
-too. The dashboard shows the observed precision (overall, by debt kind,
-model and mechanism) and, from 20 decided semantic proposals, suggests the
-lowest confidence threshold reaching 80 % precision. Nothing changes until a
-person clicks *Apply to this repository*.
+**Repair.** Replacement (field by field, hybrid) is proposed first;
+*Regenerate* asks for a whole new Javadoc, on demand
+(`/docdebt regenerate <id>` on the PR, or the button). The reviewer accepts
+either one, or edits the text and accepts it: an edited Javadoc is checked
+again by the exact rules before it is committed. Rejecting always asks why
+(`/docdebt reject <id> false-positive`).
+
+**Dashboard.** Getting-started guide, status banner (model, knowledge base,
+last webhook), *To review* queue with keyboard shortcuts (A accept, R reject,
+G regenerate, E edit, arrows to move), three-column word diff, live progress
+of scans, costs per proposal, pull request and month, actionable error
+messages, links to the file, the line and the commit. *Settings* keeps one
+choice: an optional monthly cost cap (off by default).
+
+**Check run.** Each review publishes a `DocDebt Guardian` check run with an
+annotation at each Javadoc in debt; with *Block the merge while documentation debt is pending* on, it
+fails while a proposal is pending (make it a required check to block
+merging). Needs **Checks: Read and write** on the App.
+
+**Validation.** `python scripts/validate_requirements.py` runs, for each of
+the 20 functional requirements (BF1 to BF20), the tests that are its
+acceptance test, and prints one line per requirement.
+
+**Measuring the tool (ablation).** `scripts/run_tool_benchmark.py` runs the
+application's own pipeline on the research ground truth with four context
+configurations: A no context, B same-file methods only, C hybrid search only,
+D both (the application). It reports the paper's metrics (accuracy, recall,
+specificity; structural resolution; semantic outcomes improved / unchanged /
+worsened / net against the developer's fix; preservation), Recall@4 and MRR
+of the retrieval, cost, and exact McNemar tests B vs D. Each item needs its
+repository at the commit before the fix in `--repos-dir DIR/<unique_id>/`.
+Choose on the dev split, then run the test split once:
+
+```bash
+pip install -e ".[service,rag,bench]"
+export OPENAI_API_KEY=sk-...
+python scripts/run_tool_benchmark.py --model gpt-5.6-luna --api-key-env OPENAI_API_KEY \
+    --price-in 1.25 --price-out 10 \
+    --dataset /abs/verified_final_DEFINITIVE_363.xlsx --split-file /abs/config/split.csv --split dev \
+    --repos-dir /abs/parent_commits --out /abs/runs/tool_dev.csv
+```
 
 ## Benchmark workflow (Qwen first, then GPT-5.6)
 
@@ -388,8 +423,11 @@ src/docdebt/
   llm/         config, catalog, client, parsing, prompts/{detection_wordings, registry, fewshot, explain}
   detection/   citations, judge, router, context, calibration
   repair/      wordings, registry, fewshot, extract, plan, verifier, repairer, apply
-  benchmark.py settings.py pipeline.py cli.py
-scripts/       smoke_test, export_fewshot, make_split, run_benchmark, calibrate, parity_check,
+  rag/         embeddings (BM25, MiniLM), vectors (Chroma), knowledge, retriever (RRF)
+  graph/       state, nodes, build
+  service/     app, review_flow, engine, llm_settings, secrets, store, health, learning, webhooks
+  benchmark.py evaluation.py settings.py pipeline.py cli.py
+scripts/       validate_requirements, run_tool_benchmark, smoke_test, export_fewshot, make_split, run_benchmark, calibrate, parity_check,
                oracle_repair_check, smoke_test_repair, run_repair_benchmark, export_repair_fewshot, diagnose_ollama
 config/        docdebt.example.yml
 tests/         unit and end-to-end tests with a scripted chat model

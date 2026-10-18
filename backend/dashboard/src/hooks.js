@@ -29,34 +29,43 @@ export function useApi(paths, { refreshMs = 0, reloadKey = 0 } = {}) {
 }
 
 // Accept / reject a proposal; same effect as a `/docdebt accept|reject <id>`
-// reply on the PR. A rejection can carry a reason (false_positive,
-// incorrect_fix, manual, other): it feeds the observed precision.
+// reply on the PR. A rejection always carries its reason (false_positive,
+// incorrect_fix, manual, other): it feeds the observed precision. An accept
+// commits the field-by-field fix by default; `options.mechanism` can be
+// "regeneration" or "edited" (with `options.editedDoc`).
 // `results` maps short_id -> { ok, message } for display.
 export function useDecision(onDone) {
   const [busyId, setBusyId] = useState(null);
   const [results, setResults] = useState({});
 
   const decide = useCallback(
-    async (proposal, decision, reason = null) => {
+    async (proposal, decision, reason = null, options = {}) => {
       const label = `${proposal.method_label} (${proposal.owner}/${proposal.repo}#${proposal.pr_number})`;
-      if (decision === "accept" && !window.confirm(`Commit the fix for ${label} to the pull request branch?`)) {
-        return;
+      const what = { regeneration: "the regenerated Javadoc", edited: "your edited Javadoc" }[options.mechanism] || "the fix";
+      if (decision === "accept" && !options.skipConfirm && !window.confirm(`Commit ${what} for ${label} to the pull request branch?`)) {
+        return false;
       }
       const setResult = (ok, message) => setResults((prev) => ({ ...prev, [proposal.short_id]: { ok, message } }));
       setBusyId(proposal.short_id);
+      let ok = false;
       try {
         const { status, body } = await sendWithToken("POST", `/api/proposals/${proposal.short_id}/decide`, {
           decision,
           ...(reason ? { reason } : {}),
+          ...(options.mechanism ? { mechanism: options.mechanism } : {}),
+          ...(options.editedDoc ? { edited_doc: options.editedDoc } : {}),
         });
-        if (status === 200) setResult(body.status !== "not_applied" && body.status !== "expired", body.message);
-        else if (status !== 0) setResult(false, errorText(body, status));
+        if (status === 200) {
+          ok = body.status !== "not_applied" && body.status !== "expired";
+          setResult(ok, body.message);
+        } else if (status !== 0) setResult(false, errorText(body, status));
       } catch (e) {
         setResult(false, `Could not reach the service: ${e}`);
       } finally {
         setBusyId(null);
         onDone?.();
       }
+      return ok;
     },
     [onDone],
   );

@@ -15,17 +15,24 @@ dependencies = [
     "pyyaml>=6.0",
     "typer>=0.12",
     "langchain-core>=1.0",
-    "langchain-ollama>=1.0",
     "langgraph>=1.0",
     "langgraph-checkpoint-sqlite>=2.0",
     "javalang>=0.13",  # hybrid Replacement layers 1-2 (research code, kept as tested)
 ]
 
 [project.optional-dependencies]
-service = ["fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27", "pyjwt>=2.7", "cryptography>=42"]
+service = [
+    "fastapi>=0.110", "uvicorn[standard]>=0.30", "httpx>=0.27", "pyjwt>=2.7", "cryptography>=42",
+    # The three providers of the models offered on the Model page.
+    "langchain-openai>=1.0", "langchain-anthropic>=1.0", "langchain-google-genai>=2.0",
+]
+# Retrieval: all-MiniLM-L6-v2 embeddings and the embedded Chroma vector index.
+rag = ["sentence-transformers>=3.0", "chromadb>=1.0"]
 openai = ["langchain-openai>=1.0"]
 anthropic = ["langchain-anthropic>=1.0"]
 google = ["langchain-google-genai>=2.0"]
+# Local Ollama models: only for the research scripts (parity, benchmarks), never used by the application.
+local = ["langchain-ollama>=1.0"]
 context = ["sentence-transformers>=3.0", "numpy>=1.26"]
 bench = ["pandas>=2.2", "openpyxl>=3.1"]
 dev = ["pytest>=8.0", "ruff>=0.5", "mypy>=1.10", "javalang>=0.13"]

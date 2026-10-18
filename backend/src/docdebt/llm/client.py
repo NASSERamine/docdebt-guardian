@@ -104,8 +104,8 @@ def default_chat_model_factory(spec: ModelSpec, max_tokens: int, temperature: fl
             **kwargs,
         )
 
-    api_key = None
-    if spec.api_key_env:
+    api_key = spec.api_key
+    if api_key is None and spec.api_key_env:
         api_key = os.environ.get(spec.api_key_env)
         if not api_key:
             raise LLMError(

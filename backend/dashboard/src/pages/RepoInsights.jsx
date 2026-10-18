@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { errorText, getJson, sendWithToken } from "../api.js";
-import { PrecisionCard, StateNote, formatDate, percent, timeAgo } from "../components.jsx";
+import { ErrorNote, PrecisionCard, StateNote, formatDate, percent, timeAgo } from "../components.jsx";
 import { useApi } from "../hooks.js";
 
 // The repository page's "insights": documentation health of the default
-// branch, the knowledge base (RAG) built by the same scan, the repository's
-// policy, and what DocDebt learnt from the reviewers' decisions.
+// branch, the knowledge base (RAG) indexed by the same scan and kept up to
+// date by every push, the merge block, and the observed precision.
 
 const POLL_MS = 2000;
 
@@ -91,7 +91,21 @@ function useHealthScan(owner, repo, running, onFinished) {
     else if (status !== 0) setError(errorText(body, status));
   }
 
-  return { active, error, start };
+  return { active, error, start, progress: active ? { done: scan.progress_done || 0, total: scan.progress_total || 0 } : null };
+}
+
+// Live progress of a running scan (U5).
+export function Progress({ progress, label }) {
+  if (!progress) return null;
+  const pct = progress.total ? Math.round((100 * progress.done) / progress.total) : 0;
+  return (
+    <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className="progress-bar" style={{ width: `${pct}%` }} />
+      <span className="progress-label">
+        {label} {progress.total ? `${progress.done}/${progress.total}` : "starting…"}
+      </span>
+    </div>
+  );
 }
 
 function HealthCard({ health, scan, enabled, connected }) {
@@ -171,26 +185,27 @@ function HealthCard({ health, scan, enabled, connected }) {
           >
             {scan.active ? "Analysing…" : "Analyse the default branch"}
           </button>
-          {(scan.error || health.last_error) && (
-            <span className="feed-result error">{scan.error || `Last scan failed: ${health.last_error}`}</span>
-          )}
+          <Progress progress={scan.progress} label="Reading files" />
+          {(scan.error || health.last_error) && <ErrorNote text={scan.error || `Last scan failed: ${health.last_error}`} />}
         </div>
       )}
     </div>
   );
 }
 
-function KnowledgeCard({ kb, scan, enabled, connected, ragEnabled }) {
+function KnowledgeCard({ kb, scan, enabled, connected }) {
   return (
     <div className="panel">
       <div className="panel-heading">
         <h2>Knowledge base (RAG)</h2>
-        <span className={`badge ${ragEnabled ? "ok" : ""}`}>{ragEnabled ? "used in reviews" : "off for this repository"}</span>
+        <span className="badge ok">always used in reviews</span>
       </div>
       <p className="field-help">
-        What DocDebt knows about this project: it retrieves the relevant excerpts for each method and gives them to the
-        model as reference, so fixes follow the project&apos;s vocabulary and conventions. Each accepted fix is added
-        as an example.
+        What DocDebt knows about this project. For each method it gives the model up to three documented methods of
+        the same file, then the four best excerpts of this base: hybrid search, BM25 keywords and{" "}
+        <span className="mono">all-MiniLM-L6-v2</span> vectors fused by rank (no similarity threshold). Every accepted
+        fix — an edited one too — is added as an example; every push to the default branch re-indexes the files it
+        changed.
       </p>
       <div className="kb-counts">
         {Object.entries(kb.counts).map(([kind, n]) => (
@@ -204,18 +219,21 @@ function KnowledgeCard({ kb, scan, enabled, connected, ragEnabled }) {
         {kb.indexed_at ? (
           <>
             Indexed {timeAgo(kb.indexed_at)}
-            {kb.commit_sha && ` at ${kb.commit_sha.slice(0, 7)}`} · ranking:{" "}
-            <span className="mono">{kb.embedder === "bm25" ? "BM25 (keywords)" : `embeddings, ${kb.embedder}`}</span>
+            {kb.commit_sha && ` at ${kb.commit_sha.slice(0, 7)}`} · vectors:{" "}
+            <span className="mono">{kb.embedder === "bm25" ? "none (BM25 only)" : kb.embedder}</span>
           </>
         ) : (
-          "Not indexed yet: reviews still use the file under review (same-file methods, called methods)."
+          <span className="pending">
+            Not indexed yet: reviews use the methods of the file under review only. Index it with the button below.
+          </span>
         )}
       </p>
       {connected && (
         <div className="form-actions">
           <button type="button" className="page-btn" disabled={!enabled || scan.active} onClick={scan.start}>
-            {scan.active ? "Indexing…" : "Re-index from the default branch"}
+            {scan.active ? "Indexing…" : kb.indexed_at ? "Re-index from the default branch" : "Index the knowledge base"}
           </button>
+          <Progress progress={scan.progress} label="Indexing" />
         </div>
       )}
     </div>
@@ -242,126 +260,23 @@ function PolicyCard({ owner, repo, policy, enabled, onSaved }) {
     }
   }
 
-  const toggles = [
-    {
-      key: "allow_cloud",
-      label: policy.cloud_model ? `Allow the cloud model (${policy.cloud_model})` : "Allow the cloud model",
-      help: policy.cloud_model
-        ? "Cascade: the local model first; the cloud model only when the local one fails or is not confident enough. Off: the code never leaves your machine."
-        : "No known cloud model is configured (DOCDEBT_CLOUD_MODEL, OPENAI_API_KEY): reviews stay local.",
-    },
-    {
-      key: "rag_enabled",
-      label: "Use the knowledge base (RAG)",
-      help: "Give the model excerpts of this project as reference.",
-    },
-    {
-      key: "block_on_structural",
-      label: "Block the merge on structural debt",
-      help: 'The "DocDebt Guardian" check run fails while structural debt is pending. Make it required in the branch protection rules to block merging.',
-    },
-  ];
   return (
     <div className="panel">
-      <h2>Repository policy</h2>
+      <h2>Merge check</h2>
       <fieldset className="plain-fieldset" disabled={!enabled || saving}>
-        {toggles.map((t) => (
-          <div className="field" key={t.key}>
-            <label className="checkbox">
-              <input type="checkbox" checked={Boolean(policy[t.key])} onChange={(e) => save({ [t.key]: e.target.checked })} />
-              {t.label}
-            </label>
-            <p className="field-help">{t.help}</p>
-          </div>
-        ))}
         <div className="field">
-          <span className="field-label">Confidence threshold</span>
+          <label className="checkbox">
+            <input type="checkbox" checked={Boolean(policy.block_on_debt)} onChange={(e) => save({ block_on_debt: e.target.checked })} />
+            Block the merge while documentation debt is pending
+          </label>
           <p className="field-help">
-            {policy.confidence_threshold != null ? (
-              <>
-                <strong>{policy.confidence_threshold.toFixed(2)}</strong> for this repository (global:{" "}
-                {policy.global_confidence_threshold.toFixed(2)}).{" "}
-                <button type="button" className="link-btn" onClick={() => save({ clear_threshold: true })}>
-                  Use the global value
-                </button>
-              </>
-            ) : (
-              <>Global value: {policy.global_confidence_threshold.toFixed(2)} (Settings).</>
-            )}
+            The &quot;DocDebt Guardian&quot; check run fails while a proposal of the pull request waits for a decision
+            (otherwise it is neutral). Make it required in the branch protection rules to block merging.
           </p>
         </div>
       </fieldset>
-      {!enabled && <p className="field-help">Sign in or set DOCDEBT_DASHBOARD_TOKEN to change the policy.</p>}
-      {message && <span className={`feed-result ${message.ok ? "ok" : "error"}`}>{message.text}</span>}
-    </div>
-  );
-}
-
-function ThresholdCard({ owner, repo, suggestion, enabled, onApplied }) {
-  const s = suggestion;
-  const [message, setMessage] = useState(null);
-
-  async function apply() {
-    const { status, body } = await sendWithToken("PUT", `${apiBase(owner, repo)}/settings`, {
-      confidence_threshold: s.suggested,
-    });
-    if (status === 200) {
-      setMessage({ ok: true, text: `Threshold ${s.suggested.toFixed(2)} applied to this repository.` });
-      onApplied();
-    } else if (status !== 0) setMessage({ ok: false, text: errorText(body, status) });
-  }
-
-  const data = s.curve.map((r) => ({ ...r, pct: r.precision == null ? null : Math.round(r.precision * 100) }));
-  return (
-    <div className="panel">
-      <div className="panel-heading">
-        <h2>Confidence threshold, learnt</h2>
-        <span className="field-hint">target precision {percent(s.target)}</span>
-      </div>
-      <p className="field-help">
-        For semantic debt, the precision the accepted/rejected decisions show at each threshold of the Judge. A higher
-        threshold reports less debt, with fewer false alarms. Nothing changes until you apply it.
-      </p>
-      {s.curve.length === 0 ? (
-        <p className="state-note">No decided semantic proposal yet.</p>
-      ) : (
-        <ResponsiveContainer width="100%" height={130}>
-          <LineChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-            <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="threshold" tick={{ fontSize: 11, fill: "var(--ink-faint)" }} axisLine={{ stroke: "var(--border)" }} tickLine={false} />
-            <YAxis domain={[0, 100]} tick={{ fontSize: 11, fill: "var(--ink-faint)" }} axisLine={false} tickLine={false} />
-            <Tooltip content={<ChartTip render={(r) => `≥ ${r.threshold}: ${r.pct}% precision · ${r.kept} proposals kept`} />} />
-            <ReferenceLine y={s.target * 100} stroke="var(--pending)" strokeDasharray="4 4" />
-            {s.current != null && <ReferenceLine x={s.current} stroke="var(--ink-faint)" label={{ value: "now", fill: "var(--ink-faint)", fontSize: 10 }} />}
-            <Line isAnimationActive={false} type="stepAfter" dataKey="pct" stroke="var(--action)" strokeWidth={2} dot={{ r: 2 }} />
-          </LineChart>
-        </ResponsiveContainer>
-      )}
-      <div className="form-actions">
-        {s.suggested != null ? (
-          <>
-            <span>
-              Suggested: <strong className="mono">{s.suggested.toFixed(2)}</strong>
-              {s.current != null && <span className="muted"> (now {s.current.toFixed(2)})</span>}
-            </span>
-            <button
-              type="button"
-              className="primary-btn"
-              disabled={!enabled || (s.current != null && Math.abs(s.current - s.suggested) < 1e-9)}
-              onClick={apply}
-            >
-              Apply to this repository
-            </button>
-          </>
-        ) : (
-          <span className="field-help">
-            {s.enough
-              ? "No threshold reaches the target precision with enough proposals kept."
-              : `A suggestion appears after ${s.min_decisions} decided semantic proposals (${s.decisions} so far).`}
-          </span>
-        )}
-        {message && <span className={`feed-result ${message.ok ? "ok" : "error"}`}>{message.text}</span>}
-      </div>
+      {!enabled && <p className="field-help">Sign in or set DOCDEBT_DASHBOARD_TOKEN to change it.</p>}
+      {message && (message.ok ? <span className="feed-result ok">{message.text}</span> : <ErrorNote text={message.text} />)}
     </div>
   );
 }
@@ -376,7 +291,6 @@ export default function RepoInsights({ owner, repo, connected, enabled }) {
       `${base}/knowledge`,
       `${base}/settings`,
       `/api/precision?repo=${encodeURIComponent(`${owner}/${repo}`)}&days=90`,
-      `${base}/threshold-suggestion`,
     ],
     { reloadKey },
   );
@@ -386,20 +300,19 @@ export default function RepoInsights({ owner, repo, connected, enabled }) {
     <StateNote error={!data && error} loading={!data && loading}>
       {data &&
         (() => {
-          const [health, kb, policy, precision, suggestion] = data;
+          const [health, kb, policy, precision] = data;
           return (
             <>
               <h2 className="section-title">Documentation health and knowledge</h2>
               <div className="columns">
                 <HealthCard health={health} scan={scan} enabled={enabled} connected={connected} />
-                <KnowledgeCard kb={kb} scan={scan} enabled={enabled} connected={connected} ragEnabled={policy.rag_enabled} />
+                <KnowledgeCard kb={kb} scan={scan} enabled={enabled} connected={connected} />
               </div>
-              <h2 className="section-title">Policy and learning</h2>
+              <h2 className="section-title">Merge check and decisions</h2>
               <div className="columns">
                 <PolicyCard owner={owner} repo={repo} policy={policy} enabled={enabled} onSaved={reload} />
-                <ThresholdCard owner={owner} repo={repo} suggestion={suggestion} enabled={enabled} onApplied={reload} />
+                <PrecisionCard precision={precision} title="Observed precision on this repository" />
               </div>
-              <PrecisionCard precision={precision} title="Observed precision on this repository" />
             </>
           );
         })()}

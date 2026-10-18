@@ -12,7 +12,7 @@ from difflib import unified_diff
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from docdebt.llm.prompts.registry import SCREENED_ON
+from docdebt.llm.prompts.registry import SCREENED_ON, is_screened
 
 
 def read_thread_values(checkpointer: BaseCheckpointSaver, thread_id: str) -> dict | None:
@@ -25,7 +25,7 @@ def read_thread_values(checkpointer: BaseCheckpointSaver, thread_id: str) -> dic
 
 
 def _finding_json(finding: dict) -> dict:
-    keys = ("kind", "severity", "rule", "message", "field", "line", "quoted_doc", "quoted_code", "confidence")
+    keys = ("kind", "severity", "rule", "message", "field", "line", "quoted_doc", "quoted_code")
     return {key: finding.get(key) for key in keys}
 
 
@@ -76,9 +76,12 @@ def build_details(values: dict) -> dict:
         "detection": {
             "status": values.get("detection_status"),
             "model": values.get("detection_model"),
-            "confidence": values.get("detection_confidence"),
+            "error": values.get("detection_error"),
             # A model reusing the prompts screened for a sibling model (e.g. gpt-5.6-luna -> gpt-5.6).
             "screened_on": SCREENED_ON.get(values.get("detection_model") or ""),
+            "screened": is_screened(values.get("detection_model") or "")
+            if values.get("detection_model")
+            else None,
         },
         "repair": {
             "status": values.get("repair_status"),
@@ -87,12 +90,15 @@ def build_details(values: dict) -> dict:
             "prompt_version": values.get("repair_prompt_version"),
             "repaired_doc": repaired,
             "changes": values.get("changes", []),
-            "mechanism": values.get("repair_mechanism") or "regeneration",
+            "mechanism": "replacement"
+            if values.get("repair_mechanism") == "hybrid"
+            else (values.get("repair_mechanism") or "regeneration"),
             # Hybrid mechanism: what the post-validation did with each field the model answered.
             "field_log": values.get("field_log", []),
         },
         # The retrieved project context given to the model (RAG), excerpt by excerpt.
         "rag_context": values.get("rag_context", []),
+        "indent": indent,
         "diff": diff[2:],  # without the "--- current" / "+++ proposed" header lines
         "final": values.get("final"),
     }

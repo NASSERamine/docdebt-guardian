@@ -1,0 +1,13 @@
+Date      : 2026-10-18 15:49:03 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/validate_requirements.py BF5 BF6 BF7 BF15
+----------------------------------------------------------------
+BF5   OK     Retrieved context on every analysis: siblings + hybrid top-k, leak guard, deterministic  [9 passed, 230 deselected in 1.98s]
+BF6   OK     A field-by-field fix (Replacement), verified before it is shown  [7 passed, 232 deselected in 0.69s]
+BF7   OK     Regeneration on demand, attached to the same proposal  [6 passed, 233 deselected in 2.28s]
+BF15  OK     Index the knowledge base (button, and every push to the default branch)  [5 passed, 234 deselected in 0.88s]
+
+4/4 functional requirements validated.
+Code de sortie : 0

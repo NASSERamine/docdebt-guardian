@@ -1,13 +1,17 @@
 import { Link, NavLink, Route, Routes } from "react-router-dom";
 import { RequireUser, canUseApp, useAuth } from "./auth.jsx";
+import { useApi } from "./hooks.js";
 import History from "./pages/History.jsx";
 import Home, { SignInButton } from "./pages/Home.jsx";
 import HowItWorks from "./pages/HowItWorks.jsx";
 import Overview from "./pages/Overview.jsx";
+import ModelPage from "./pages/ModelPage.jsx";
 import ProposalDetail from "./pages/ProposalDetail.jsx";
 import RepoDetail from "./pages/RepoDetail.jsx";
 import Repositories from "./pages/Repositories.jsx";
+import ReviewQueue from "./pages/ReviewQueue.jsx";
 import Settings from "./pages/Settings.jsx";
+import StatusBanner from "./StatusBanner.jsx";
 
 function NotFound() {
   return (
@@ -32,6 +36,23 @@ function UserMenu() {
   );
 }
 
+function AppLinks() {
+  const { data } = useApi(["/api/summary"], { refreshMs: 30000 });
+  const pending = data?.[0]?.pending ?? 0;
+  return (
+    <>
+      <NavLink to="/overview">Dashboard</NavLink>
+      <NavLink to="/review">
+        To review{pending > 0 && <span className="nav-count">{pending}</span>}
+      </NavLink>
+      <NavLink to="/repositories">Repositories</NavLink>
+      <NavLink to="/proposals">History</NavLink>
+      <NavLink to="/model">Model</NavLink>
+      <NavLink to="/settings">Settings</NavLink>
+    </>
+  );
+}
+
 // Every page of the application itself needs a signed-in user (or local mode).
 const app = (element) => <RequireUser>{element}</RequireUser>;
 
@@ -45,23 +66,19 @@ export default function App() {
           DocDebt Guardian
         </Link>
         <nav className="nav">
-          {inside && (
-            <>
-              <NavLink to="/overview">Dashboard</NavLink>
-              <NavLink to="/repositories">Repositories</NavLink>
-              <NavLink to="/proposals">History</NavLink>
-              <NavLink to="/settings">Settings</NavLink>
-            </>
-          )}
+          {inside && <AppLinks />}
           <NavLink to="/how-it-works">How it works</NavLink>
         </nav>
         <UserMenu />
       </header>
+      {inside && <StatusBanner />}
       <main>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/how-it-works" element={<HowItWorks />} />
           <Route path="/overview" element={app(<Overview />)} />
+          <Route path="/review" element={app(<ReviewQueue />)} />
+          <Route path="/model" element={app(<ModelPage />)} />
           <Route path="/repositories" element={app(<Repositories />)} />
           <Route path="/proposals" element={app(<History />)} />
           <Route path="/proposals/:shortId" element={app(<ProposalDetail />)} />

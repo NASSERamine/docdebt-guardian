@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { errorText, sendWithToken } from "./api.js";
+import { actionFor, errorText, sendWithToken } from "./api.js";
 
 export function timeAgo(unixSeconds) {
   const seconds = Math.max(0, Date.now() / 1000 - unixSeconds);
@@ -40,8 +40,49 @@ export function ConnectButton({ connectUrl, children = "+ Connect a repository" 
   );
 }
 
+// An error message with what to do about it (a link to the page that fixes it).
+export function ErrorNote({ text, className = "feed-result error" }) {
+  if (!text) return null;
+  const action = actionFor(text);
+  return (
+    <span className={className}>
+      {text}
+      {action && (
+        <>
+          {" "}
+          {action.to == null ? (
+            <strong className="error-action">{action.label}</strong>
+          ) : action.external ? (
+            <a className="error-action" href={action.to} target="_blank" rel="noreferrer">
+              {action.label} ↗
+            </a>
+          ) : (
+            <Link className="error-action" to={action.to}>
+              {action.label} →
+            </Link>
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
+// The amount of a cost, in dollars (very small amounts keep their digits).
+export function money(value) {
+  if (value == null) return "—";
+  if (value === 0) return "$0";
+  return value < 0.01 ? `$${value.toFixed(4)}` : `$${value.toFixed(2)}`;
+}
+
 export function StateNote({ error, loading, children }) {
-  if (error) return <p className="state-note">Could not reach the service: {error}</p>;
+  if (error) {
+    return (
+      <p className="state-note">
+        Could not reach the service: {error}. Check that the service is running (<span className="mono">./run_local.sh</span>)
+        and reload the page.
+      </p>
+    );
+  }
   if (loading) return <p className="state-note">Loading…</p>;
   return children ?? null;
 }
@@ -102,8 +143,8 @@ export const REJECT_REASONS = [
   { key: "other", label: "Other", help: "Any other reason." },
 ];
 
-// Reject in two clicks: "Reject", then "Why?" — the reason is what the
-// precision and the threshold suggestion learn from. "No reason" still works.
+// Reject in two clicks: "Reject", then "Why?" — the reason is mandatory: it is
+// what the observed precision and the reject statistics are made of.
 export function RejectButton({ proposal, busy, onDecide, big = false }) {
   const [open, setOpen] = useState(false);
   const choose = (reason) => {
@@ -130,9 +171,6 @@ export function RejectButton({ proposal, busy, onDecide, big = false }) {
               {r.label}
             </button>
           ))}
-          <button type="button" role="menuitem" className="muted" onClick={() => choose(null)}>
-            No reason
-          </button>
         </span>
       )}
     </span>
@@ -160,11 +198,16 @@ export function percent(value) {
   return value == null ? "—" : `${Math.round(value * 100)}%`;
 }
 
-const MECHANISM_LABELS = { hybrid: "hybrid", regeneration: "regeneration" };
+export const MECHANISM_LABELS = {
+  replacement: "field-by-field replacement",
+  hybrid: "field-by-field replacement",
+  regeneration: "regeneration",
+  edited: "edited by the reviewer",
+};
 const REASON_LABELS = Object.fromEntries(REJECT_REASONS.map((r) => [r.key, r.label]));
 
 // Observed precision: accepted / (accepted + rejected) over a period, with
-// the breakdowns that explain it. Shown once there are enough decisions.
+// the breakdowns that explain it. Plain statistics: nothing depends on them.
 export function PrecisionCard({ precision, title = "Observed precision" }) {
   const p = precision;
   return (
@@ -178,17 +221,15 @@ export function PrecisionCard({ precision, title = "Observed precision" }) {
       ) : (
         <>
           <div className="precision-head">
-            <span className={`precision-value ${p.enough ? "" : "muted"}`}>{percent(p.precision)}</span>
+            <span className="precision-value">{percent(p.precision)}</span>
             <span className="field-help">
               {p.accepted} accepted / {p.decisions} decided
-              {!p.enough && ` · indicative until ${p.min_decisions} decisions`}
             </span>
           </div>
           <div className="precision-grid">
             {[
-              ["By debt kind", p.by_kind, (k) => k],
               ["By model", p.by_model, (k) => k],
-              ["By repair mechanism", p.by_mechanism, (k) => MECHANISM_LABELS[k] || k],
+              ["By what was committed", p.by_mechanism, (k) => MECHANISM_LABELS[k] || k],
             ].map(([label, rows, fmt]) =>
               rows.length ? (
                 <div key={label}>
@@ -230,7 +271,12 @@ export function PrecisionCard({ precision, title = "Observed precision" }) {
 // returned by useDecision; `showRepo` is false on a repository's own page.
 export function ProposalList({ proposals, decisionsEnabled, decisions, showRepo = true, absoluteDates = false }) {
   if (proposals.length === 0) {
-    return <p className="state-note">No proposal matches.</p>;
+    return (
+      <p className="state-note">
+        No proposal here yet. DocDebt proposes a fix when a pull request changes a Java method whose Javadoc no longer
+        matches its code — open one, or use <strong>Scan now</strong> on a repository page.
+      </p>
+    );
   }
   return (
     <ul className="feed">
@@ -257,7 +303,9 @@ export function ProposalList({ proposals, decisionsEnabled, decisions, showRepo 
               </div>
               <div className="feed-meta">
                 {m.label}
-                {p.reject_reason && ` (${REASON_LABELS[p.reject_reason] || p.reject_reason})`} · {absoluteDates ? formatDate(p.created_at) : timeAgo(p.created_at)} ·{" "}
+                {p.reject_reason && ` (${REASON_LABELS[p.reject_reason] || p.reject_reason})`}
+                {p.accepted_mechanism && ` (${MECHANISM_LABELS[p.accepted_mechanism] || p.accepted_mechanism})`} ·{" "}
+                {absoluteDates ? formatDate(p.created_at) : timeAgo(p.created_at)} ·{" "}
                 <span className="mono">{p.file_path}</span>
                 {pending && !decisionsEnabled && (
                   <>
@@ -267,7 +315,9 @@ export function ProposalList({ proposals, decisionsEnabled, decisions, showRepo 
                 )}
                 {decisions.busyId === p.short_id && " · working…"}
               </div>
-              {result && <div className={`feed-result ${result.ok ? "ok" : "error"}`}>{result.message}</div>}
+              {result && (
+                <div>{result.ok ? <span className="feed-result ok">{result.message}</span> : <ErrorNote text={result.message} />}</div>
+              )}
             </div>
             <span className="row-actions">
               <Link className="page-btn" to={`/proposals/${p.short_id}`}>

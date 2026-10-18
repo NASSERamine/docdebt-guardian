@@ -215,6 +215,6 @@ def test_decisions_need_no_dashboard_token_when_signed_in(client, settings, monk
     )
     sign_in(client)
     mine = proposal(settings, "acme", "demo")
-    response = client.post(f"/api/proposals/{mine}/decide", json={"decision": "reject"})
+    response = client.post(f"/api/proposals/{mine}/decide", json={"decision": "reject", "reason": "other"})
     assert response.status_code == 200 and response.json()["status"] == "rejected"
     assert client.get("/api/dashboard-config").json() == {"decisions_enabled": True, "auth_enabled": True}

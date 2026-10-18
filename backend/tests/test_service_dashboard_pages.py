@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 
 from docdebt.service.app import create_app
 from docdebt.service.config import ServiceSettings
-from docdebt.service.runtime_settings import effective_runtime_settings, to_docdebt_settings
+from docdebt.service.runtime_settings import effective_runtime_settings
 from docdebt.service.store import ReviewStore
 
 TOKEN = "dash-token"
@@ -132,9 +132,9 @@ def test_installations_keep_disconnected_repositories(store):
 
 def test_settings_overrides_round_trip(store):
     assert store.get_settings() == {}
-    store.save_settings({"structural_only": False, "max_total_cost_usd": 2.5})
+    store.save_settings({"max_total_cost_usd": 2.5})
     store.save_settings({"max_total_cost_usd": None})
-    assert store.get_settings() == {"structural_only": False, "max_total_cost_usd": None}
+    assert store.get_settings() == {"max_total_cost_usd": None}
     store.clear_settings()
     assert store.get_settings() == {}
 
@@ -142,26 +142,16 @@ def test_settings_overrides_round_trip(store):
 # -- runtime settings -------------------------------------------------------------
 
 
-def test_effective_settings_are_env_defaults_plus_saved_overrides(settings, store):
-    assert effective_runtime_settings(settings, store).structural_only is True
-    store.save_settings({"structural_only": False, "confidence_threshold": 0.8, "repair_model": "codegemma:7b"})
+def test_only_the_cost_cap_is_a_runtime_setting(settings, store):
+    assert effective_runtime_settings(settings, store).max_total_cost_usd is None
+    store.save_settings({"max_total_cost_usd": 3.0, "confidence_threshold": 0.8, "repair_model": "codegemma:7b"})
     runtime = effective_runtime_settings(settings, store)
-    assert (runtime.structural_only, runtime.confidence_threshold, runtime.repair_model) == (
-        False,
-        0.8,
-        "codegemma:7b",
-    )
-    docdebt = to_docdebt_settings(runtime)
-    assert docdebt.repair.model == "codegemma:7b" and docdebt.router.cascade == ["codegemma:7b"]
-    assert docdebt.judge_config("codegemma:7b").confidence_threshold == 0.8
+    assert runtime.model_dump() == {"max_total_cost_usd": 3.0}  # old keys of earlier versions are ignored
 
 
 def test_an_invalid_saved_value_is_ignored_not_fatal(settings, store):
-    store.save_settings({"repair_model": "no-such-model", "confidence_threshold": 7, "structural_only": False})
-    runtime = effective_runtime_settings(settings, store)
-    assert runtime.repair_model == settings.repair_model  # bad values fall back to the defaults
-    assert runtime.confidence_threshold == 0.0
-    assert runtime.structural_only is False  # the valid one still applies
+    store.save_settings({"max_total_cost_usd": -7})
+    assert effective_runtime_settings(settings, store).max_total_cost_usd is None
 
 
 # -- API: history and repository detail -------------------------------------------
@@ -209,48 +199,28 @@ def test_api_repos_lists_disconnected_installations(client, store):
 # -- API: settings ---------------------------------------------------------------------
 
 
-def valid_settings(**overrides):
-    return {
-        "repair_model": "qwen2.5-coder:7b",
-        "repair_pattern": "cot",
-        "structural_only": False,
-        "confidence_threshold": 0.6,
-        "max_total_cost_usd": 1.5,
-        **overrides,
-    }
-
-
 def test_api_settings_read_update_and_reset(client):
     initial = client.get("/api/settings").json()
     assert initial["editable"] is True and initial["overridden"] == []
-    assert "qwen2.5-coder:7b" in initial["choices"]["models"]
+    assert initial["effective"] == {"max_total_cost_usd": None}
 
-    updated = client.put("/api/settings", json=valid_settings(), headers=AUTH).json()
-    assert updated["effective"]["repair_pattern"] == "cot" and updated["effective"]["max_total_cost_usd"] == 1.5
-    assert "max_total_cost_usd" in updated["overridden"]
-    assert client.get("/api/settings").json()["effective"]["confidence_threshold"] == 0.6
+    updated = client.put("/api/settings", json={"max_total_cost_usd": 1.5}, headers=AUTH).json()
+    assert updated["effective"]["max_total_cost_usd"] == 1.5 and updated["overridden"] == ["max_total_cost_usd"]
 
     reset = client.delete("/api/settings", headers=AUTH).json()
     assert reset["effective"] == initial["effective"] and reset["overridden"] == []
 
 
 def test_api_settings_changes_need_the_token_and_valid_values(client, settings):
-    assert client.put("/api/settings", json=valid_settings()).status_code == 401
+    assert client.put("/api/settings", json={"max_total_cost_usd": 1}).status_code == 401
     assert client.delete("/api/settings").status_code == 401
-    assert client.put("/api/settings", json=valid_settings(repair_model="gpt-9"), headers=AUTH).status_code == 422
-    assert (
-        client.put("/api/settings", json=valid_settings(repair_pattern="oneshot"), headers=AUTH).status_code == 422
-    )
-    assert (
-        client.put("/api/settings", json=valid_settings(confidence_threshold=2), headers=AUTH).status_code == 422
-    )
-    assert client.put("/api/settings", json=valid_settings(max_total_cost_usd=-1), headers=AUTH).status_code == 422
+    assert client.put("/api/settings", json={"max_total_cost_usd": -1}, headers=AUTH).status_code == 422
 
     from dataclasses import replace
 
     read_only = TestClient(create_app(replace(settings, dashboard_token=None)))
     assert read_only.get("/api/settings").json()["editable"] is False
-    assert read_only.put("/api/settings", json=valid_settings()).status_code == 403
+    assert read_only.put("/api/settings", json={"max_total_cost_usd": 1}).status_code == 403
 
 
 # -- settings reach the review run; the cost cap stops it ---------------------------
@@ -264,21 +234,32 @@ def pr_event():
     )
 
 
-def test_a_review_uses_the_settings_saved_from_the_dashboard(settings, store, monkeypatch):
+def test_a_review_uses_the_model_saved_on_the_model_page(settings, store, monkeypatch):
     from docdebt.service import app as app_module
+    from docdebt.service.llm_settings import LOCAL_SCOPE
+    from docdebt.service.secrets import encrypt, load_cipher
 
     seen = {}
 
-    def fake_deps(service_settings, runtime, policy, **kwargs):
-        mode = "structural" if runtime.structural_only else "pipeline"
-        seen.update(model=runtime.repair_model, pattern=runtime.repair_pattern, mode=mode)
+    def fake_deps(spec, **kwargs):
+        seen.update(model=spec.id if spec else None, key=spec.api_key if spec else None)
         raise RuntimeError("stop after capturing the configuration")
 
     monkeypatch.setattr(app_module, "build_service_deps", fake_deps)
-    store.save_settings({"repair_model": "deepseek-coder:6.7b-instruct", "repair_pattern": "cot"})
-    store.save_settings({"structural_only": False})
+    monkeypatch.setattr(app_module, "choose_embedder", lambda mode: None)
+    app_module._handle_pull_request(settings, store, pr_event())  # nothing saved: exact rules only
+    assert seen == {"model": None, "key": None}
+    cipher = load_cipher(settings.state_db_path.parent)
+    store.save_llm_config(
+        LOCAL_SCOPE,
+        model="claude-sonnet-5",
+        api_key_enc=encrypt(cipher, "sk-ant-secret-1234"),
+        key_hint="…1234",
+        price_in_per_m=None,
+        price_out_per_m=None,
+    )
     app_module._handle_pull_request(settings, store, pr_event())  # the error is logged, not raised
-    assert seen == {"model": "deepseek-coder:6.7b-instruct", "pattern": "cot", "mode": "pipeline"}
+    assert seen == {"model": "claude-sonnet-5", "key": "sk-ant-secret-1234"}
 
 
 def test_cost_cap_skips_the_review_and_says_why(settings, store, monkeypatch):
@@ -385,7 +366,7 @@ def test_run_scan_records_the_outcome_or_the_failure(settings, store, monkeypatc
             return ScanOutcome(prs=2, proposed=1, clean=1)
 
     @contextmanager
-    def fake_build_flow(*args):
+    def fake_build_flow(*args, **kwargs):
         yield FakeFlow()
 
     monkeypatch.setattr(app_module, "_build_flow", fake_build_flow)
@@ -394,7 +375,7 @@ def test_run_scan_records_the_outcome_or_the_failure(settings, store, monkeypatc
     assert (store.get_scan(ok)["status"], store.get_scan(ok)["proposed"]) == ("done", 1)
 
     @contextmanager
-    def broken_build_flow(*args):
+    def broken_build_flow(*args, **kwargs):
         raise RuntimeError("GitHub unreachable")
         yield
 

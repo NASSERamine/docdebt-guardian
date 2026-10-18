@@ -1,0 +1,28 @@
+Date      : 2026-10-18 15:49:27 CET
+Commit    : a0e745d796e1c078a6a464e5483f1fa4e2ccd7d8 (main)
+Python    : Python 3.12.3
+Système   : Linux 7.0.0-38-generic
+Commande  : python scripts/check_rag.py
+----------------------------------------------------------------
+Project    : built-in demo (3 Java file(s), README: yes)
+Method     : Temperature.toCelsius (src/main/java/demo/Temperature.java:10)
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 2103.04it/s]
+OK  embedding model loaded: minilm:all-MiniLM-L6-v2 in 20.8 s
+Index      : Chroma; knowledge base: {'counts': {'method': 4, 'test': 1, 'readme': 3, 'validated': 0}, 'total': 8, 'embedder': 'minilm:all-MiniLM-L6-v2', 'indexed': True, 'indexed_at': 1792334989.9525757, 'commit_sha': None}
+
+Context    : 5 item(s) (siblings <= 3, then top 4, RRF k=60)
+  1. [siblings] Temperature.toFahrenheit (src/main/java/demo/Temperature.java)
+  1. [similar] Temperature.isFreezing (src/main/java/demo/Temperature.java)  RRF 0.0328  BM25 #1  vectors #1
+  2. [tests] TemperatureTest.absoluteZero (src/test/java/demo/TemperatureTest.java)  RRF 0.0320  BM25 #2  vectors #3
+  3. [readme] README §2 (README)  RRF 0.0320  BM25 #3  vectors #2
+  4. [similar] Pressure.toPascal (src/main/java/demo/Pressure.java)  RRF 0.0312  BM25 #4  vectors #4
+OK  siblings first, from the same file: 1 sibling(s)
+OK  hybrid search within its size: 4 item(s)
+OK  vector ranks used by the fusion
+OK  leak guard (no method named like the target)
+OK  budget: 1335 / 3600 characters
+OK  deterministic (same context twice)
+OK  Chroma ranks like the exact vector search: Temperature.toFahrenheit > Temperature.isFreezing > TemperatureTest.absoluteZero > README §2
+
+Result     : 8/8 check(s) passed
+Code de sortie : 0
